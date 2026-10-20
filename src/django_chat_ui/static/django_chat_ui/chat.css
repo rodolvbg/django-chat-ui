@@ -25,7 +25,9 @@
 }
 
 @media (prefers-color-scheme: dark) {
-    :is(chat-thread, chat-inbox, chat-widget):not(:is(chat-inbox, chat-widget) *):not([data-theme="light"]) {
+    :is(chat-thread, chat-inbox, chat-widget):not(
+            :is(chat-inbox, chat-widget) *
+        ):not([data-theme="light"]) {
         --chat-bg: #0d1117;
         --chat-fg: #e6edf3;
         --chat-muted: #8b949e;
@@ -41,7 +43,9 @@
     }
 }
 
-:is(chat-thread, chat-inbox, chat-widget):not(:is(chat-inbox, chat-widget) *)[data-theme="dark"] {
+:is(chat-thread, chat-inbox, chat-widget):not(
+        :is(chat-inbox, chat-widget) *
+    )[data-theme="dark"] {
     --chat-bg: #0d1117;
     --chat-fg: #e6edf3;
     --chat-muted: #8b949e;
@@ -335,6 +339,12 @@ chat-thread[hidden] {
     color: var(--chat-fg);
     font: inherit;
     resize: none;
+}
+
+.chat-input::placeholder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .chat-send,

@@ -10,7 +10,7 @@
  */
 
 import { registeredParts } from "./parts.js";
-import { PROTOCOL_VERSIONS, newId } from "./protocol.js";
+import { newId, PROTOCOL_VERSIONS } from "./protocol.js";
 import { ConversationStore } from "./store.js";
 
 export class CommandError extends Error {
@@ -190,9 +190,8 @@ export class ChatClient extends EventTarget {
 
     /** Send a failed message again (same clientId: never sent twice). */
     retry(conversation, clientId) {
-        const message = this.conversation(conversation).findByClientId(
-            clientId,
-        );
+        const message =
+            this.conversation(conversation).findByClientId(clientId);
         if (!message) {
             return Promise.reject(new CommandError({ code: "not_found" }));
         }

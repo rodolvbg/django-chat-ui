@@ -65,6 +65,7 @@ export class ChatInbox extends HTMLElement {
     constructor() {
         super();
         this._client = null;
+        this._uploader = null;
         this._texts = INBOX_TEXTS;
         this._selected = null;
         this.query = "";
@@ -82,6 +83,16 @@ export class ChatInbox extends HTMLElement {
         client.addEventListener("ready", this.onChange);
         if (this.thread) this.thread.client = client;
         this.render();
+    }
+
+    /** The uploader of its thread (see <chat-thread>). */
+    get uploader() {
+        return this._uploader;
+    }
+
+    set uploader(uploader) {
+        this._uploader = uploader;
+        if (this.thread) this.thread.uploader = uploader;
     }
 
     get texts() {
@@ -147,7 +158,9 @@ export class ChatInbox extends HTMLElement {
         this.placeholder = element("p", "chat-inbox-pick");
         this.thread = document.createElement("chat-thread");
         if (this._client) this.thread.client = this._client;
-        if (this._selected) this.thread.setAttribute("conversation", this._selected);
+        if (this._uploader) this.thread.uploader = this._uploader;
+        if (this._selected)
+            this.thread.setAttribute("conversation", this._selected);
         pane.append(header, this.placeholder, this.thread);
         this.shell.append(list, pane);
         this.append(this.shell);
@@ -170,7 +183,10 @@ export class ChatInbox extends HTMLElement {
             const conversation = store.conversation;
             const haystack = [
                 conversation.title,
-                ...(conversation.participants ?? []).flatMap((p) => [p.name, p.handle]),
+                ...(conversation.participants ?? []).flatMap((p) => [
+                    p.name,
+                    p.handle,
+                ]),
                 preview(store.lastMessage, this._texts),
             ]
                 .filter(Boolean)
@@ -190,12 +206,15 @@ export class ChatInbox extends HTMLElement {
         this.placeholder.textContent = texts.pick;
 
         const stores = this.visible();
-        this.items.replaceChildren(...stores.map((store) => this.renderItem(store)));
+        this.items.replaceChildren(
+            ...stores.map((store) => this.renderItem(store)),
+        );
         const total = this._client?.list().length ?? 0;
         this.empty.textContent = total ? texts.noResults : texts.empty;
         this.empty.hidden = stores.length > 0;
 
-        const current = this._selected && this._client?.stores.get(this._selected);
+        const current =
+            this._selected && this._client?.stores.get(this._selected);
         this.shell.classList.toggle("chat-inbox--open", Boolean(current));
         this.placeholder.hidden = Boolean(current);
         this.thread.hidden = !current;
@@ -206,7 +225,9 @@ export class ChatInbox extends HTMLElement {
     title(store) {
         const conversation = store.conversation;
         const me = this._client?.me?.id;
-        const others = (conversation.participants ?? []).filter((p) => p.id !== me);
+        const others = (conversation.participants ?? []).filter(
+            (p) => p.id !== me,
+        );
         return conversation.title ?? others.map((p) => p.name).join(", ") ?? "";
     }
 
@@ -216,7 +237,9 @@ export class ChatInbox extends HTMLElement {
         const contact = (conversation.participants ?? []).find(
             (p) => p.id !== me && p.handle,
         );
-        return [conversation.channel, contact?.handle].filter(Boolean).join(" · ");
+        return [conversation.channel, contact?.handle]
+            .filter(Boolean)
+            .join(" · ");
     }
 
     renderItem(store) {

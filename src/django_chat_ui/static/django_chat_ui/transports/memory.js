@@ -131,7 +131,10 @@ export class FakeServer {
         this.emit("message.created", message);
         const current = this.conversations.get(conversation);
         if (current) {
-            const changes = { lastMessage: message, updatedAt: message.createdAt };
+            const changes = {
+                lastMessage: message,
+                updatedAt: message.createdAt,
+            };
             if (author !== this.me.id) {
                 changes.unread = (current.unread ?? 0) + 1;
             }
@@ -173,9 +176,8 @@ export class FakeServer {
 }
 
 const COMMANDS = {
-    hello(data, frame) {
-        const resumed =
-            Boolean(this.resume) && this.resume.seq <= this.seq;
+    hello(_data, frame) {
+        const resumed = Boolean(this.resume) && this.resume.seq <= this.seq;
         this.answer(
             "ready",
             {
@@ -191,7 +193,8 @@ const COMMANDS = {
             for (const event of this.log.filter(
                 (event) => event.seq > this.resume.seq,
             )) {
-                for (const transport of this.transports) transport.deliver(event);
+                for (const transport of this.transports)
+                    transport.deliver(event);
             }
         }
     },
@@ -225,10 +228,13 @@ const COMMANDS = {
         const conversation = this.conversations.get(data.conversation);
         if (conversation?.unread) {
             conversation.unread = 0;
-            this.emit("conversation.updated", { id: data.conversation, unread: 0 });
+            this.emit("conversation.updated", {
+                id: data.conversation,
+                unread: 0,
+            });
         }
     },
-    typing(data, frame) {
+    typing(_data, frame) {
         this.answer("ack", {}, frame.id);
     },
     "conversation.open"(data, frame) {

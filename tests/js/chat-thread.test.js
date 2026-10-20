@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEXTS } from "../../src/django_chat_ui/static/django_chat_ui/chat-thread.js";
-import { registerPart, unregisterPart } from "../../src/django_chat_ui/static/django_chat_ui/parts.js";
-import { ME, flush, messages, setup, text } from "./helpers.js";
+import {
+    registerPart,
+    unregisterPart,
+} from "../../src/django_chat_ui/static/django_chat_ui/parts.js";
+import { flush, ME, messages, setup, text } from "./helpers.js";
 
 const BOT = { id: "p_bot", kind: "bot", name: "Asistente" };
 const ANA = { id: "p_ana", kind: "contact", name: "Ana García" };
@@ -10,7 +13,11 @@ const chatbot = {
     id: "conv_bot",
     channel: "bot",
     participants: [ME, BOT],
-    capabilities: { streaming: true, buttons: true, composer: { mode: "free" } },
+    capabilities: {
+        streaming: true,
+        buttons: true,
+        composer: { mode: "free" },
+    },
 };
 
 const whatsapp = {
@@ -28,7 +35,14 @@ function type(thread, value) {
 }
 
 function enter(input, options = {}) {
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...options }));
+    input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+            key: "Enter",
+            bubbles: true,
+            cancelable: true,
+            ...options,
+        }),
+    );
 }
 
 afterEach(() => {
@@ -38,21 +52,36 @@ afterEach(() => {
 
 describe("<chat-thread> with a chatbot", () => {
     it("streams the bot's answer, and its quick replies act", async () => {
-        const { server, client, thread } = await setup({ conversations: [[chatbot]], thread: "conv_bot" });
-        server.onMessage = (message, srv) => {
+        const { server, client, thread } = await setup({
+            conversations: [[chatbot]],
+            thread: "conv_bot",
+        });
+        server.onMessage = (_message, srv) => {
             srv.stream("conv_bot", "p_bot", ["Tu pedido ", "sale hoy."], {
                 parts: [
                     { type: "text", text: "Tu pedido sale hoy." },
-                    { type: "buttons", buttons: [{ id: "human", label: "Hablar con alguien" }], fallback: "Hablar con alguien" },
+                    {
+                        type: "buttons",
+                        buttons: [{ id: "human", label: "Hablar con alguien" }],
+                        fallback: "Hablar con alguien",
+                    },
                 ],
             });
         };
-        server.onAction = (data, srv) => srv.post("conv_bot", "p_bot", [{ type: "text", text: `Vale (${data.button})` }]);
+        server.onAction = (data, srv) =>
+            srv.post("conv_bot", "p_bot", [
+                { type: "text", text: `Vale (${data.button})` },
+            ]);
 
         // What the thread showed after each change: streaming at some point.
         const streaming = [];
         client.conversation("conv_bot").addEventListener("change", () => {
-            streaming.push(Boolean(thread.querySelector(".chat-message--streaming .chat-text")?.textContent));
+            streaming.push(
+                Boolean(
+                    thread.querySelector(".chat-message--streaming .chat-text")
+                        ?.textContent,
+                ),
+            );
         });
 
         enter(type(thread, "¿Dónde está mi pedido?"));
@@ -71,14 +100,24 @@ describe("<chat-thread> with a chatbot", () => {
         expect(mine.querySelector(".chat-status")).toBeNull();
         expect(answer.className).toContain("chat-message--bot");
         expect(answer.className).not.toContain("streaming");
-        expect(answer.querySelector(".chat-author").textContent).toBe("Asistente");
-        expect(answer.querySelector(".chat-text").textContent).toBe("Tu pedido sale hoy.");
+        expect(answer.querySelector(".chat-author").textContent).toBe(
+            "Asistente",
+        );
+        expect(answer.querySelector(".chat-text").textContent).toBe(
+            "Tu pedido sale hoy.",
+        );
 
         const button = answer.querySelector(".chat-button");
         button.click();
-        expect(answer.isConnected ? thread.querySelector(".chat-button").disabled : true).toBe(true);
+        expect(
+            answer.isConnected
+                ? thread.querySelector(".chat-button").disabled
+                : true,
+        ).toBe(true);
         await flush();
-        expect(server.received.find((frame) => frame.type === "action").data).toEqual({
+        expect(
+            server.received.find((frame) => frame.type === "action").data,
+        ).toEqual({
             conversation: "conv_bot",
             message: answer.dataset.id,
             button: "human",
@@ -88,54 +127,105 @@ describe("<chat-thread> with a chatbot", () => {
     });
 
     it("sends with Enter, not with Shift+Enter or when empty", async () => {
-        const { server, thread } = await setup({ conversations: [[chatbot]], thread: "conv_bot" });
+        const { server, thread } = await setup({
+            conversations: [[chatbot]],
+            thread: "conv_bot",
+        });
         enter(type(thread, "  "));
         enter(type(thread, "line"), { shiftKey: true });
         enter(type(thread, "line"), { isComposing: true });
-        thread.querySelector(".chat-input").dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
+        thread
+            .querySelector(".chat-input")
+            .dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
         await flush();
-        expect(server.received.filter((f) => f.type === "message.send")).toHaveLength(0);
+        expect(
+            server.received.filter((f) => f.type === "message.send"),
+        ).toHaveLength(0);
 
         thread.querySelector(".chat-send").click();
         await flush();
-        expect(server.received.filter((f) => f.type === "message.send")).toHaveLength(1);
+        expect(
+            server.received.filter((f) => f.type === "message.send"),
+        ).toHaveLength(1);
     });
 
     it("only offers the buttons when the composer is 'actions'", async () => {
         const { thread } = await setup({
-            conversations: [[{ ...chatbot, capabilities: { composer: { mode: "actions" } } }]],
+            conversations: [
+                [
+                    {
+                        ...chatbot,
+                        capabilities: { composer: { mode: "actions" } },
+                    },
+                ],
+            ],
             thread: "conv_bot",
         });
         expect(thread.querySelector(".chat-input")).toBeNull();
-        expect(thread.querySelector(".chat-composer-note").textContent).toBe(TEXTS.actionsOnly);
-        thread.querySelector(".chat-composer").dispatchEvent(new Event("submit", { cancelable: true }));
+        expect(thread.querySelector(".chat-composer-note").textContent).toBe(
+            TEXTS.actionsOnly,
+        );
+        thread
+            .querySelector(".chat-composer")
+            .dispatchEvent(new Event("submit", { cancelable: true }));
     });
 });
 
 describe("<chat-thread> with WhatsApp", () => {
     it("shows receipts, typing, and templates once the window closes", async () => {
-        const { server, thread } = await setup({ conversations: [[whatsapp]], thread: "conv_wa" });
+        const { server, thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
 
         enter(type(thread, "Hola Ana"));
         await flush();
         const mine = () => messages(thread)[0];
         expect(mine().querySelector(".chat-status").textContent).toBe("✓");
         const id = mine().dataset.id;
-        server.emit("message.updated", { id, conversation: "conv_wa", status: "delivered" });
+        server.emit("message.updated", {
+            id,
+            conversation: "conv_wa",
+            status: "delivered",
+        });
         await flush();
         expect(mine().querySelector(".chat-status").textContent).toBe("✓✓");
-        server.emit("message.updated", { id, conversation: "conv_wa", status: "read" });
+        server.emit("message.updated", {
+            id,
+            conversation: "conv_wa",
+            status: "read",
+        });
         await flush();
         expect(mine().querySelector(".chat-status--read").title).toBe("Read");
 
-        server.emit("typing", { conversation: "conv_wa", participant: "p_ana", active: true });
+        server.emit("typing", {
+            conversation: "conv_wa",
+            participant: "p_ana",
+            active: true,
+        });
         await flush();
-        expect(thread.querySelector(".chat-typing").textContent).toBe("Ana García is typing…");
-        server.emit("typing", { conversation: "conv_wa", participant: "p_x", active: true });
+        expect(thread.querySelector(".chat-typing").textContent).toBe(
+            "Ana García is typing…",
+        );
+        server.emit("typing", {
+            conversation: "conv_wa",
+            participant: "p_x",
+            active: true,
+        });
         await flush();
-        expect(thread.querySelector(".chat-typing").textContent).toBe(TEXTS.typingMany);
-        server.emit("typing", { conversation: "conv_wa", participant: "p_x", active: false });
-        server.emit("typing", { conversation: "conv_wa", participant: "p_ana", active: false });
+        expect(thread.querySelector(".chat-typing").textContent).toBe(
+            TEXTS.typingMany,
+        );
+        server.emit("typing", {
+            conversation: "conv_wa",
+            participant: "p_x",
+            active: false,
+        });
+        server.emit("typing", {
+            conversation: "conv_wa",
+            participant: "p_ana",
+            active: false,
+        });
         await flush();
         expect(thread.querySelector(".chat-typing").textContent).toBe("");
 
@@ -146,8 +236,17 @@ describe("<chat-thread> with WhatsApp", () => {
                     mode: "templates",
                     reason: "Han pasado más de 24 horas.",
                     templates: [
-                        { id: "followup", name: "Seguimiento", preview: "Hola {{1}}, ¿te ayudamos en {{2}}?", params: ["name", "topic"] },
-                        { id: "bye", name: "Despedida", preview: "Hasta pronto." },
+                        {
+                            id: "followup",
+                            name: "Seguimiento",
+                            preview: "Hola {{1}}, ¿te ayudamos en {{2}}?",
+                            params: ["name", "topic"],
+                        },
+                        {
+                            id: "bye",
+                            name: "Despedida",
+                            preview: "Hasta pronto.",
+                        },
                     ],
                 },
             },
@@ -155,7 +254,9 @@ describe("<chat-thread> with WhatsApp", () => {
         await flush();
 
         expect(thread.querySelector(".chat-input")).toBeNull();
-        expect(thread.querySelector(".chat-composer-note").textContent).toBe("Han pasado más de 24 horas.");
+        expect(thread.querySelector(".chat-composer-note").textContent).toBe(
+            "Han pasado más de 24 horas.",
+        );
         const [name, topic] = thread.querySelectorAll(".chat-template-param");
         const preview = thread.querySelector(".chat-template-preview");
         expect(preview.textContent).toBe("Hola {{1}}, ¿te ayudamos en {{2}}?");
@@ -167,42 +268,76 @@ describe("<chat-thread> with WhatsApp", () => {
 
         thread.querySelector(".chat-send").click();
         await flush();
-        const sent = server.received.filter((f) => f.type === "message.send").at(-1);
+        const sent = server.received
+            .filter((f) => f.type === "message.send")
+            .at(-1);
         expect(sent.data.parts).toEqual([
-            { type: "template", template: "followup", params: { name: "Ana", topic: "tu pedido" }, fallback: "Hola Ana, ¿te ayudamos en tu pedido?" },
+            {
+                type: "template",
+                template: "followup",
+                params: { name: "Ana", topic: "tu pedido" },
+                fallback: "Hola Ana, ¿te ayudamos en tu pedido?",
+            },
         ]);
-        expect(text(messages(thread).at(-1))).toContain("Hola Ana, ¿te ayudamos en tu pedido?");
+        expect(text(messages(thread).at(-1))).toContain(
+            "Hola Ana, ¿te ayudamos en tu pedido?",
+        );
 
         // Another template, without params.
         const select = thread.querySelector(".chat-template");
         select.value = "bye";
         select.dispatchEvent(new Event("change"));
         expect(thread.querySelectorAll(".chat-template-param")).toHaveLength(0);
-        expect(preview.isConnected ? preview.textContent : thread.querySelector(".chat-template-preview").textContent).toBe("Hasta pronto.");
+        expect(
+            preview.isConnected
+                ? preview.textContent
+                : thread.querySelector(".chat-template-preview").textContent,
+        ).toBe("Hasta pronto.");
     });
 
     it("tells the server it's typing, then that it stopped", async () => {
-        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
-        const { server, thread } = await setup({ conversations: [[whatsapp]], thread: "conv_wa" });
+        vi.useFakeTimers({
+            toFake: ["setTimeout", "clearTimeout"],
+            shouldAdvanceTime: true,
+        });
+        const { server, thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
         type(thread, "H");
         type(thread, "Ho");
         await vi.advanceTimersByTimeAsync(3100);
         await flush();
-        const typing = server.received.filter((f) => f.type === "typing").map((f) => f.data.active);
+        const typing = server.received
+            .filter((f) => f.type === "typing")
+            .map((f) => f.data.active);
         expect(typing).toEqual([true, false]);
 
         type(thread, "Hola");
         enter(thread.querySelector(".chat-input"));
         await flush();
-        expect(server.received.filter((f) => f.type === "typing").map((f) => f.data.active)).toEqual([true, false, true, false]);
+        expect(
+            server.received
+                .filter((f) => f.type === "typing")
+                .map((f) => f.data.active),
+        ).toEqual([true, false, true, false]);
     });
 
     it("shows a failed message with Retry", async () => {
-        const { server, thread } = await setup({ conversations: [[whatsapp]], thread: "conv_wa" });
-        server.reject = () => ({ code: "channel_error", message: "WhatsApp rejected it" });
+        const { server, thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
+        server.reject = () => ({
+            code: "channel_error",
+            message: "WhatsApp rejected it",
+        });
         enter(type(thread, "Hola"));
         await flush();
-        expect(messages(thread)[0].querySelector(".chat-status--failed").textContent).toBe("WhatsApp rejected it");
+        expect(
+            messages(thread)[0].querySelector(".chat-status--failed")
+                .textContent,
+        ).toBe("WhatsApp rejected it");
 
         server.reject = null;
         messages(thread)[0].querySelector(".chat-retry").click();
@@ -212,7 +347,10 @@ describe("<chat-thread> with WhatsApp", () => {
     });
 
     it("marks what it shows as read, once", async () => {
-        const { server, thread } = await setup({ conversations: [[whatsapp]], thread: "conv_wa" });
+        const { server, thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
         server.post("conv_wa", "p_ana", [{ type: "text", text: "Hola" }]);
         await flush();
         thread.render();
@@ -225,17 +363,34 @@ describe("<chat-thread> with WhatsApp", () => {
 
 describe("<chat-thread>", () => {
     it("groups messages, names authors and centers system lines", async () => {
-        const team = { id: "conv_team", channel: "internal", participants: [ME, ANA, { id: "p_luis", kind: "agent", name: "Luis" }] };
-        const { server, thread } = await setup({ conversations: [[team]], thread: "conv_team" });
+        const team = {
+            id: "conv_team",
+            channel: "internal",
+            participants: [
+                ME,
+                ANA,
+                { id: "p_luis", kind: "agent", name: "Luis" },
+            ],
+        };
+        const { server, thread } = await setup({
+            conversations: [[team]],
+            thread: "conv_team",
+        });
         server.post("conv_team", "p_ana", [{ type: "text", text: "uno" }]);
         server.post("conv_team", "p_ana", [{ type: "text", text: "dos" }]);
         server.post("conv_team", "p_luis", [{ type: "text", text: "tres" }]);
-        server.post("conv_team", undefined, [{ type: "system", text: "Luis se unió" }]);
-        server.post("conv_team", "p_ana", [{ type: "text", text: "cuatro" }], { editedAt: "2026-10-20T10:05:00Z" });
+        server.post("conv_team", undefined, [
+            { type: "system", text: "Luis se unió" },
+        ]);
+        server.post("conv_team", "p_ana", [{ type: "text", text: "cuatro" }], {
+            editedAt: "2026-10-20T10:05:00Z",
+        });
         await flush();
 
         const [one, two, three, system, four] = messages(thread);
-        expect(one.querySelector(".chat-author").textContent).toBe("Ana García");
+        expect(one.querySelector(".chat-author").textContent).toBe(
+            "Ana García",
+        );
         expect(two.className).toContain("continued");
         expect(two.querySelector(".chat-author")).toBeNull();
         expect(three.className).toContain("chat-message--agent");
@@ -243,15 +398,26 @@ describe("<chat-thread>", () => {
         expect(system.querySelector(".chat-meta")).toBeNull();
         expect(four.querySelector(".chat-edited").textContent).toBe("edited");
         expect(four.querySelector("time").dateTime).toBeTruthy();
-        expect(thread.querySelector(".chat-log").getAttribute("role")).toBe("log");
+        expect(thread.querySelector(".chat-log").getAttribute("role")).toBe(
+            "log",
+        );
     });
 
     it("renders an extension's part, or its fallback", async () => {
-        const { server, thread } = await setup({ conversations: [[whatsapp]], thread: "conv_wa" });
-        const order = { type: "acme.order", fallback: "Pedido A-1029", ext: { acme: { orderId: "A-1029" } } };
+        const { server, thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
+        const order = {
+            type: "acme.order",
+            fallback: "Pedido A-1029",
+            ext: { acme: { orderId: "A-1029" } },
+        };
         server.post("conv_wa", "p_ana", [order]);
         await flush();
-        expect(thread.querySelector(".chat-part--fallback").textContent).toBe("Pedido A-1029");
+        expect(thread.querySelector(".chat-part--fallback").textContent).toBe(
+            "Pedido A-1029",
+        );
 
         registerPart("acme.order", (part) => {
             const card = document.createElement("div");
@@ -260,20 +426,36 @@ describe("<chat-thread>", () => {
             return card;
         });
         thread.render();
-        expect(thread.querySelector(".acme-order").textContent).toBe("Order A-1029");
+        expect(thread.querySelector(".acme-order").textContent).toBe(
+            "Order A-1029",
+        );
         unregisterPart("acme.order");
     });
 
     it("says why a closed conversation can't be written to", async () => {
-        const closed = { ...whatsapp, capabilities: { composer: { mode: "closed", reason: "Archivada" } } };
-        const { thread, server } = await setup({ conversations: [[closed]], thread: "conv_wa" });
-        expect(thread.querySelector(".chat-composer-note").textContent).toBe("Archivada");
+        const closed = {
+            ...whatsapp,
+            capabilities: { composer: { mode: "closed", reason: "Archivada" } },
+        };
+        const { thread, server } = await setup({
+            conversations: [[closed]],
+            thread: "conv_wa",
+        });
+        expect(thread.querySelector(".chat-composer-note").textContent).toBe(
+            "Archivada",
+        );
 
         // An extension's composer mode it doesn't know: closed.
-        server.update("conv_wa", { capabilities: { composer: { mode: "acme.vote" } } });
+        server.update("conv_wa", {
+            capabilities: { composer: { mode: "acme.vote" } },
+        });
         await flush();
-        expect(thread.querySelector(".chat-composer").dataset.mode).toBe("acme.vote");
-        expect(thread.querySelector(".chat-composer-note").textContent).toBe(TEXTS.closed);
+        expect(thread.querySelector(".chat-composer").dataset.mode).toBe(
+            "acme.vote",
+        );
+        expect(thread.querySelector(".chat-composer-note").textContent).toBe(
+            TEXTS.closed,
+        );
     });
 
     it("loads earlier messages", async () => {
@@ -285,7 +467,10 @@ describe("<chat-thread>", () => {
             createdAt: `2026-10-19T10:${String(i).padStart(2, "0")}:00Z`,
         }));
         const conversation = { ...whatsapp, capabilities: { history: true } };
-        const { thread } = await setup({ conversations: [[conversation, history]], thread: "conv_wa" });
+        const { thread } = await setup({
+            conversations: [[conversation, history]],
+            thread: "conv_wa",
+        });
         // Opening it brought the latest 30.
         expect(messages(thread)).toHaveLength(30);
         expect(text(messages(thread)[0])).toContain("#5");
@@ -300,16 +485,29 @@ describe("<chat-thread>", () => {
     });
 
     it("hides 'earlier' without history", async () => {
-        const { thread } = await setup({ conversations: [[whatsapp]], thread: "conv_wa" });
+        const { thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
         expect(thread.querySelector(".chat-earlier").hidden).toBe(true);
     });
 
     it("attaches files with an uploader", async () => {
-        const withFiles = { ...whatsapp, capabilities: { attachments: { types: ["image", "file"] } } };
-        const { server, thread } = await setup({ conversations: [[withFiles]], thread: "conv_wa" });
+        const withFiles = {
+            ...whatsapp,
+            capabilities: { attachments: { types: ["image", "file"] } },
+        };
+        const { server, thread } = await setup({
+            conversations: [[withFiles]],
+            thread: "conv_wa",
+        });
         expect(thread.querySelector(".chat-attach")).toBeNull(); // No uploader yet.
 
-        thread.uploader = vi.fn(async (file) => ({ type: "file", url: `https://x/${file.name}`, name: file.name }));
+        thread.uploader = vi.fn(async (file) => ({
+            type: "file",
+            url: `https://x/${file.name}`,
+            name: file.name,
+        }));
         thread.render();
         const input = thread.querySelector(".chat-file-input");
         expect(input.accept).toBe("image/*");
@@ -317,34 +515,78 @@ describe("<chat-thread>", () => {
         thread.querySelector(".chat-attach").click();
         expect(click).toHaveBeenCalled();
 
-        Object.defineProperty(input, "files", { configurable: true, value: [new File(["x"], "a.pdf")] });
+        Object.defineProperty(input, "files", {
+            configurable: true,
+            value: [new File(["x"], "a.pdf")],
+        });
         input.dispatchEvent(new Event("change"));
         await flush();
-        expect(server.received.filter((f) => f.type === "message.send").at(-1).data.parts).toEqual([
-            { type: "file", url: "https://x/a.pdf", name: "a.pdf" },
-        ]);
+        expect(
+            server.received.filter((f) => f.type === "message.send").at(-1).data
+                .parts,
+        ).toEqual([{ type: "file", url: "https://x/a.pdf", name: "a.pdf" }]);
 
-        Object.defineProperty(input, "files", { configurable: true, value: [] });
+        Object.defineProperty(input, "files", {
+            configurable: true,
+            value: [],
+        });
         input.dispatchEvent(new Event("change"));
         thread.uploader = vi.fn(async () => null);
         thread.render();
         const again = thread.querySelector(".chat-file-input");
-        Object.defineProperty(again, "files", { configurable: true, value: [new File(["x"], "b.pdf")] });
+        Object.defineProperty(again, "files", {
+            configurable: true,
+            value: [new File(["x"], "b.pdf")],
+        });
         again.dispatchEvent(new Event("change"));
         await flush();
-        expect(server.received.filter((f) => f.type === "message.send")).toHaveLength(1);
+        expect(
+            server.received.filter((f) => f.type === "message.send"),
+        ).toHaveLength(1);
+
+        // A failed upload: told, nothing sent.
+        const failed = vi.fn();
+        thread.addEventListener("uploaderror", (event) =>
+            failed(event.detail.error.message),
+        );
+        thread.uploader = vi.fn(async () => {
+            throw new Error("Too big");
+        });
+        thread.render();
+        const third = thread.querySelector(".chat-file-input");
+        Object.defineProperty(third, "files", {
+            configurable: true,
+            value: [new File(["x"], "c.pdf")],
+        });
+        third.dispatchEvent(new Event("change"));
+        await flush();
+        expect(failed).toHaveBeenCalledWith("Too big");
+        expect(thread.uploader).toHaveBeenCalledWith(
+            expect.any(File),
+            "conv_wa",
+        );
+        expect(
+            server.received.filter((f) => f.type === "message.send"),
+        ).toHaveLength(1);
     });
 
     it("uses its own texts", async () => {
-        const { thread } = await setup({ conversations: [[whatsapp]], thread: "conv_wa" });
+        const { thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
         thread.texts = { placeholder: "Escribe un mensaje…", send: "Enviar" };
-        expect(thread.querySelector(".chat-input").placeholder).toBe("Escribe un mensaje…");
+        expect(thread.querySelector(".chat-input").placeholder).toBe(
+            "Escribe un mensaje…",
+        );
         expect(thread.querySelector(".chat-send").textContent).toBe("Enviar");
         expect(thread.texts.retry).toBe(TEXTS.retry);
     });
 
     it("waits for a client and a conversation, and follows a new one", async () => {
-        const { client } = await setup({ conversations: [[whatsapp], [chatbot]] });
+        const { client } = await setup({
+            conversations: [[whatsapp], [chatbot]],
+        });
         const thread = document.createElement("chat-thread");
         thread.client = client; // Not in the page yet: nothing to render.
         expect(thread.store).toBeNull();
@@ -360,9 +602,14 @@ describe("<chat-thread>", () => {
     });
 
     it("keeps the message being typed while other things change", async () => {
-        const { server, thread } = await setup({ conversations: [[whatsapp]], thread: "conv_wa" });
+        const { server, thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
         const input = type(thread, "a medias");
-        server.post("conv_wa", "p_ana", [{ type: "text", text: "¿Sigues ahí?" }]);
+        server.post("conv_wa", "p_ana", [
+            { type: "text", text: "¿Sigues ahí?" },
+        ]);
         await flush();
         expect(thread.querySelector(".chat-input")).toBe(input);
         expect(input.value).toBe("a medias");
@@ -371,11 +618,21 @@ describe("<chat-thread>", () => {
 
 describe("<chat-thread> opening its conversation", () => {
     it("waits for the session, then brings its latest messages", async () => {
-        const { ChatClient } = await import("../../src/django_chat_ui/static/django_chat_ui/client.js");
-        const { FakeServer, MemoryTransport } = await import("../../src/django_chat_ui/static/django_chat_ui/transports/memory.js");
+        const { ChatClient } = await import(
+            "../../src/django_chat_ui/static/django_chat_ui/client.js"
+        );
+        const { FakeServer, MemoryTransport } = await import(
+            "../../src/django_chat_ui/static/django_chat_ui/transports/memory.js"
+        );
         const server = new FakeServer({ me: ME });
         server.addConversation(chatbot, [
-            { id: "b1", conversation: "conv_bot", author: "p_bot", createdAt: "2026-10-20T10:00:00Z", parts: [{ type: "text", text: "¡Hola!" }] },
+            {
+                id: "b1",
+                conversation: "conv_bot",
+                author: "p_bot",
+                createdAt: "2026-10-20T10:00:00Z",
+                parts: [{ type: "text", text: "¡Hola!" }],
+            },
         ]);
         const client = new ChatClient(new MemoryTransport(server));
         const thread = document.createElement("chat-thread");
@@ -386,13 +643,19 @@ describe("<chat-thread> opening its conversation", () => {
 
         await client.connect();
         await flush();
-        expect(server.received.map((f) => f.type)).toEqual(["hello", "conversation.open", "message.read"]);
+        expect(server.received.map((f) => f.type)).toEqual([
+            "hello",
+            "conversation.open",
+            "message.read",
+        ]);
         expect(text(messages(thread)[0])).toContain("¡Hola!");
 
         // Opened once, however many times it binds.
         thread.setAttribute("conversation", "conv_bot");
         await flush();
-        expect(server.received.filter((f) => f.type === "conversation.open")).toHaveLength(1);
+        expect(
+            server.received.filter((f) => f.type === "conversation.open"),
+        ).toHaveLength(1);
     });
 
     it("tries again later if opening failed", async () => {

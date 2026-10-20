@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-    PART_TYPES,
     attachmentTypes,
     capability,
     composerMode,
     isNamespaced,
     newId,
+    PART_TYPES,
 } from "../../src/django_chat_ui/static/django_chat_ui/protocol.js";
 
 describe("protocol", () => {
@@ -37,7 +37,9 @@ describe("protocol", () => {
         expect(composerMode(conversation)).toBe("templates");
         expect(composerMode({})).toBe("free");
         expect(attachmentTypes(conversation)).toEqual(["image"]);
-        expect(attachmentTypes({ capabilities: { attachments: {} } })).toEqual([]);
+        expect(attachmentTypes({ capabilities: { attachments: {} } })).toEqual(
+            [],
+        );
         expect(attachmentTypes({})).toEqual([]);
     });
 

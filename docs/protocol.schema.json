@@ -1,1129 +1,987 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/rodolvbg/django-chat-ui/blob/HEAD/docs/protocol.schema.json",
-  "title": "Chat UI protocol 1.0",
-  "description": "Frames of the chat UI protocol (docs/protocol.md). Open by design: unknown fields are allowed everywhere (must-ignore, section 3.1), and extension types are namespaced (section 3.2).",
-  "$ref": "#/$defs/frame",
-  "$defs": {
-    "id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "timestamp": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "open": {
-      "type": "object",
-      "description": "ext (keyed by namespace) or meta: never interpreted by clients that don't know them."
-    },
-    "namespaced": {
-      "type": "string",
-      "description": "An extension name: <namespace>.<name>, lowercase. Its namespace isn't one of the protocol's reserved words.",
-      "pattern": "^(?!(message|conversation|participant|typing|read|presence|action|hello|ready|ack|error|history|chat)\\.)[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$"
-    },
-    "extensible": {
-      "properties": {
-        "ext": {
-          "type": "object",
-          "propertyNames": {
-            "pattern": "^[a-z][a-z0-9_-]*$"
-          },
-          "additionalProperties": {
-            "type": "object"
-          }
-        },
-        "meta": {
-          "$ref": "#/$defs/open"
-        }
-      }
-    },
-    "participant": {
-      "type": "object",
-      "allOf": [
-        {
-          "$ref": "#/$defs/extensible"
-        }
-      ],
-      "required": [
-        "id",
-        "kind"
-      ],
-      "properties": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/rodolvbg/django-chat-ui/blob/HEAD/docs/protocol.schema.json",
+    "title": "Chat UI protocol 1.0",
+    "description": "Frames of the chat UI protocol (docs/protocol.md). Open by design: unknown fields are allowed everywhere (must-ignore, section 3.1), and extension types are namespaced (section 3.2).",
+    "$ref": "#/$defs/frame",
+    "$defs": {
         "id": {
-          "$ref": "#/$defs/id"
+            "type": "string",
+            "minLength": 1
         },
-        "kind": {
-          "anyOf": [
-            {
-              "enum": [
-                "user",
-                "agent",
-                "bot",
-                "contact",
-                "system"
-              ]
-            },
-            {
-              "$ref": "#/$defs/namespaced"
+        "timestamp": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "open": {
+            "type": "object",
+            "description": "ext (keyed by namespace) or meta: never interpreted by clients that don't know them."
+        },
+        "namespaced": {
+            "type": "string",
+            "description": "An extension name: <namespace>.<name>, lowercase. Its namespace isn't one of the protocol's reserved words.",
+            "pattern": "^(?!(message|conversation|participant|typing|read|presence|action|hello|ready|ack|error|history|chat)\\.)[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$"
+        },
+        "extensible": {
+            "properties": {
+                "ext": {
+                    "type": "object",
+                    "propertyNames": {
+                        "pattern": "^[a-z][a-z0-9_-]*$"
+                    },
+                    "additionalProperties": {
+                        "type": "object"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/$defs/open"
+                }
             }
-          ]
         },
-        "name": {
-          "type": "string"
-        },
-        "avatar": {
-          "type": "string"
-        },
-        "handle": {
-          "type": "string"
-        }
-      }
-    },
-    "conversation": {
-      "type": "object",
-      "allOf": [
-        {
-          "$ref": "#/$defs/extensible"
-        }
-      ],
-      "required": [
-        "id"
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/id"
-        },
-        "channel": {
-          "anyOf": [
-            {
-              "enum": [
-                "web",
-                "whatsapp",
-                "bot",
-                "internal",
-                "email",
-                "sms",
-                "telegram"
-              ]
-            },
-            {
-              "$ref": "#/$defs/namespaced"
+        "participant": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/extensible"
+                }
+            ],
+            "required": ["id", "kind"],
+            "properties": {
+                "id": {
+                    "$ref": "#/$defs/id"
+                },
+                "kind": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "user",
+                                "agent",
+                                "bot",
+                                "contact",
+                                "system"
+                            ]
+                        },
+                        {
+                            "$ref": "#/$defs/namespaced"
+                        }
+                    ]
+                },
+                "name": {
+                    "type": "string"
+                },
+                "avatar": {
+                    "type": "string"
+                },
+                "handle": {
+                    "type": "string"
+                }
             }
-          ]
-        },
-        "title": {
-          "type": "string"
-        },
-        "participants": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/participant"
-          }
-        },
-        "capabilities": {
-          "$ref": "#/$defs/conversationCapabilities"
-        },
-        "unread": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "lastMessage": {
-          "type": "object"
-        },
-        "state": {
-          "anyOf": [
-            {
-              "enum": [
-                "open",
-                "pending",
-                "closed"
-              ]
-            },
-            {
-              "$ref": "#/$defs/namespaced"
-            }
-          ]
-        },
-        "updatedAt": {
-          "$ref": "#/$defs/timestamp"
-        }
-      }
-    },
-    "message": {
-      "type": "object",
-      "allOf": [
-        {
-          "$ref": "#/$defs/extensible"
-        }
-      ],
-      "required": [
-        "id",
-        "conversation",
-        "parts",
-        "createdAt"
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/id"
-        },
-        "clientId": {
-          "$ref": "#/$defs/id"
         },
         "conversation": {
-          "$ref": "#/$defs/id"
-        },
-        "author": {
-          "$ref": "#/$defs/id"
-        },
-        "parts": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/part"
-          }
-        },
-        "status": {
-          "enum": [
-            "sending",
-            "sent",
-            "delivered",
-            "read",
-            "failed"
-          ]
-        },
-        "error": {
-          "$ref": "#/$defs/error"
-        },
-        "replyTo": {
-          "$ref": "#/$defs/id"
-        },
-        "createdAt": {
-          "$ref": "#/$defs/timestamp"
-        },
-        "editedAt": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/timestamp"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "deleted": {
-          "type": "boolean"
-        },
-        "streaming": {
-          "type": "boolean"
-        },
-        "reactions": {
-          "type": "array",
-          "items": {
             "type": "object",
-            "required": [
-              "emoji"
-            ],
-            "properties": {
-              "emoji": {
-                "type": "string"
-              },
-              "by": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/id"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "error": {
-      "type": "object",
-      "allOf": [
-        {
-          "$ref": "#/$defs/extensible"
-        }
-      ],
-      "required": [
-        "code"
-      ],
-      "properties": {
-        "code": {
-          "anyOf": [
-            {
-              "enum": [
-                "bad_request",
-                "unauthorized",
-                "forbidden",
-                "not_found",
-                "unknown_command",
-                "unsupported",
-                "window_closed",
-                "too_large",
-                "rate_limited",
-                "channel_error",
-                "internal"
-              ]
-            },
-            {
-              "$ref": "#/$defs/namespaced"
-            }
-          ]
-        },
-        "message": {
-          "type": "string"
-        },
-        "retry": {
-          "type": "boolean"
-        },
-        "fatal": {
-          "type": "boolean"
-        }
-      }
-    },
-    "button": {
-      "type": "object",
-      "required": [
-        "id",
-        "label"
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/id"
-        },
-        "label": {
-          "type": "string"
-        },
-        "style": {
-          "enum": [
-            "primary",
-            "secondary",
-            "danger"
-          ]
-        }
-      }
-    },
-    "part": {
-      "type": "object",
-      "allOf": [
-        {
-          "$ref": "#/$defs/extensible"
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "$ref": "#/$defs/namespaced"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "fallback"
-            ],
-            "description": "An extension part: its fallback is required (section 5.1)."
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "text"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "text"
-            ],
-            "properties": {
-              "text": {
-                "type": "string"
-              },
-              "format": {
-                "enum": [
-                  "plain",
-                  "markdown"
-                ]
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "enum": [
-                  "image",
-                  "video",
-                  "audio",
-                  "file",
-                  "link"
-                ]
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "url"
-            ],
-            "properties": {
-              "url": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "location"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "lat",
-              "lng"
-            ],
-            "properties": {
-              "lat": {
-                "type": "number"
-              },
-              "lng": {
-                "type": "number"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "contact"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "name"
-            ]
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "buttons"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "buttons"
-            ],
-            "properties": {
-              "buttons": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                  "$ref": "#/$defs/button"
-                }
-              },
-              "persist": {
-                "type": "boolean"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "card"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "buttons": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/button"
-                }
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "system"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "text"
-            ]
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "template"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "template"
-            ],
-            "properties": {
-              "params": {
-                "type": "object"
-              }
-            }
-          }
-        }
-      ],
-      "required": [
-        "type"
-      ],
-      "properties": {
-        "type": {
-          "anyOf": [
-            {
-              "enum": [
-                "text",
-                "image",
-                "video",
-                "audio",
-                "file",
-                "location",
-                "contact",
-                "buttons",
-                "link",
-                "card",
-                "system",
-                "template"
-              ]
-            },
-            {
-              "$ref": "#/$defs/namespaced"
-            }
-          ]
-        },
-        "fallback": {
-          "type": "string"
-        }
-      }
-    },
-    "conversationCapabilities": {
-      "type": "object",
-      "description": "Missing capabilities are off; namespaced keys are extension capabilities with an object value (section 6.3).",
-      "properties": {
-        "attachments": {
-          "anyOf": [
-            {
-              "const": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "types": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "maxSize": {
-                  "type": "integer",
-                  "minimum": 0
-                }
-              }
-            }
-          ]
-        },
-        "receipts": {
-          "type": "boolean"
-        },
-        "typing": {
-          "type": "boolean"
-        },
-        "presence": {
-          "type": "boolean"
-        },
-        "streaming": {
-          "type": "boolean"
-        },
-        "buttons": {
-          "type": "boolean"
-        },
-        "replies": {
-          "type": "boolean"
-        },
-        "reactions": {
-          "type": "boolean"
-        },
-        "edit": {
-          "type": "boolean"
-        },
-        "delete": {
-          "type": "boolean"
-        },
-        "history": {
-          "type": "boolean"
-        },
-        "composer": {
-          "type": "object",
-          "properties": {
-            "mode": {
-              "anyOf": [
+            "allOf": [
                 {
-                  "enum": [
-                    "free",
-                    "templates",
-                    "actions",
-                    "closed"
-                  ]
-                },
-                {
-                  "$ref": "#/$defs/namespaced"
+                    "$ref": "#/$defs/extensible"
                 }
-              ]
-            },
-            "templates": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "required": [
-                  "id"
-                ],
-                "properties": {
-                  "id": {
+            ],
+            "required": ["id"],
+            "properties": {
+                "id": {
                     "$ref": "#/$defs/id"
-                  },
-                  "name": {
+                },
+                "channel": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "web",
+                                "whatsapp",
+                                "bot",
+                                "internal",
+                                "email",
+                                "sms",
+                                "telegram"
+                            ]
+                        },
+                        {
+                            "$ref": "#/$defs/namespaced"
+                        }
+                    ]
+                },
+                "title": {
                     "type": "string"
-                  },
-                  "preview": {
-                    "type": "string"
-                  },
-                  "params": {
+                },
+                "participants": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                        "$ref": "#/$defs/participant"
                     }
-                  }
-                }
-              }
-            },
-            "maxLength": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "placeholder": {
-              "type": "string"
-            },
-            "reason": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "patternProperties": {
-        "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$": {
-          "type": "object"
-        }
-      }
-    },
-    "clientCapabilities": {
-      "type": "object",
-      "properties": {
-        "parts": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "streaming": {
-          "type": "boolean"
-        },
-        "formats": {
-          "type": "array",
-          "items": {
-            "enum": [
-              "plain",
-              "markdown"
-            ]
-          }
-        }
-      },
-      "patternProperties": {
-        "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$": {
-          "type": "object"
-        }
-      }
-    },
-    "frame": {
-      "type": "object",
-      "allOf": [
-        {
-          "$ref": "#/$defs/extensible"
-        }
-      ],
-      "required": [
-        "type",
-        "data"
-      ],
-      "properties": {
-        "type": {
-          "type": "string",
-          "minLength": 1
-        },
-        "id": {
-          "$ref": "#/$defs/id"
-        },
-        "seq": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "ref": {
-          "$ref": "#/$defs/id"
-        },
-        "data": {
-          "type": "object"
-        }
-      },
-      "description": "The data of the protocol's own events and commands is checked below; any other (namespaced) type passes with any data (must-ignore).",
-      "oneOf": [
-        {
-          "properties": {
-            "type": {
-              "const": "hello"
-            },
-            "data": {
-              "required": [
-                "protocol"
-              ],
-              "properties": {
-                "protocol": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
                 },
                 "capabilities": {
-                  "$ref": "#/$defs/clientCapabilities"
+                    "$ref": "#/$defs/conversationCapabilities"
                 },
-                "resume": {
-                  "type": "object",
-                  "properties": {
-                    "seq": {
-                      "type": "integer"
+                "unread": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "lastMessage": {
+                    "type": "object"
+                },
+                "state": {
+                    "anyOf": [
+                        {
+                            "enum": ["open", "pending", "closed"]
+                        },
+                        {
+                            "$ref": "#/$defs/namespaced"
+                        }
+                    ]
+                },
+                "updatedAt": {
+                    "$ref": "#/$defs/timestamp"
+                }
+            }
+        },
+        "message": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/extensible"
+                }
+            ],
+            "required": ["id", "conversation", "parts", "createdAt"],
+            "properties": {
+                "id": {
+                    "$ref": "#/$defs/id"
+                },
+                "clientId": {
+                    "$ref": "#/$defs/id"
+                },
+                "conversation": {
+                    "$ref": "#/$defs/id"
+                },
+                "author": {
+                    "$ref": "#/$defs/id"
+                },
+                "parts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/part"
                     }
-                  }
-                }
-              }
-            }
-          },
-          "required": [
-            "id"
-          ]
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "ready"
-            },
-            "data": {
-              "required": [
-                "protocol",
-                "me"
-              ],
-              "properties": {
-                "protocol": {
-                  "type": "string"
                 },
-                "me": {
-                  "$ref": "#/$defs/participant"
-                },
-                "conversations": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/conversation"
-                  }
-                },
-                "resumed": {
-                  "type": "boolean"
-                }
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "ack"
-            }
-          },
-          "required": [
-            "ref"
-          ]
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "error"
-            },
-            "data": {
-              "$ref": "#/$defs/error"
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "conversation.created"
-              ]
-            },
-            "data": {
-              "$ref": "#/$defs/conversation"
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "conversation.updated",
-                "conversation.removed"
-              ]
-            },
-            "data": {
-              "required": [
-                "id"
-              ]
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "message.created"
-            },
-            "data": {
-              "$ref": "#/$defs/message"
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "message.updated"
-            },
-            "data": {
-              "required": [
-                "id",
-                "conversation"
-              ],
-              "properties": {
-                "parts": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/part"
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "message.delta"
-            },
-            "data": {
-              "required": [
-                "id",
-                "conversation",
-                "part",
-                "text"
-              ],
-              "properties": {
-                "part": {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                "text": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "typing"
-            },
-            "data": {
-              "required": [
-                "conversation",
-                "active"
-              ],
-              "properties": {
-                "active": {
-                  "type": "boolean"
-                }
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "read"
-            },
-            "data": {
-              "required": [
-                "conversation",
-                "until"
-              ]
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "presence"
-            },
-            "data": {
-              "required": [
-                "participant",
-                "status"
-              ],
-              "properties": {
                 "status": {
-                  "enum": [
-                    "online",
-                    "away",
-                    "offline"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "history"
-            },
-            "data": {
-              "required": [
-                "conversation",
-                "messages",
-                "more"
-              ],
-              "properties": {
-                "messages": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/message"
-                  }
+                    "enum": ["sending", "sent", "delivered", "read", "failed"]
                 },
-                "more": {
-                  "type": "boolean"
+                "error": {
+                    "$ref": "#/$defs/error"
+                },
+                "replyTo": {
+                    "$ref": "#/$defs/id"
+                },
+                "createdAt": {
+                    "$ref": "#/$defs/timestamp"
+                },
+                "editedAt": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/timestamp"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "deleted": {
+                    "type": "boolean"
+                },
+                "streaming": {
+                    "type": "boolean"
+                },
+                "reactions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["emoji"],
+                        "properties": {
+                            "emoji": {
+                                "type": "string"
+                            },
+                            "by": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/$defs/id"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
         },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "conversation.open",
-                "conversation.close"
-              ]
+        "error": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/extensible"
+                }
+            ],
+            "required": ["code"],
+            "properties": {
+                "code": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "bad_request",
+                                "unauthorized",
+                                "forbidden",
+                                "not_found",
+                                "unknown_command",
+                                "unsupported",
+                                "window_closed",
+                                "too_large",
+                                "rate_limited",
+                                "channel_error",
+                                "internal"
+                            ]
+                        },
+                        {
+                            "$ref": "#/$defs/namespaced"
+                        }
+                    ]
+                },
+                "message": {
+                    "type": "string"
+                },
+                "retry": {
+                    "type": "boolean"
+                },
+                "fatal": {
+                    "type": "boolean"
+                }
             }
-          },
-          "required": [
-            "id"
-          ]
         },
-        {
-          "properties": {
-            "type": {
-              "const": "message.send"
+        "button": {
+            "type": "object",
+            "required": ["id", "label"],
+            "properties": {
+                "id": {
+                    "$ref": "#/$defs/id"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "style": {
+                    "enum": ["primary", "secondary", "danger"]
+                }
+            }
+        },
+        "part": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/extensible"
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "$ref": "#/$defs/namespaced"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": ["fallback"],
+                        "description": "An extension part: its fallback is required (section 5.1)."
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "text"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": ["text"],
+                        "properties": {
+                            "text": {
+                                "type": "string"
+                            },
+                            "format": {
+                                "enum": ["plain", "markdown"]
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "enum": [
+                                    "image",
+                                    "video",
+                                    "audio",
+                                    "file",
+                                    "link"
+                                ]
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": ["url"],
+                        "properties": {
+                            "url": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "location"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": ["lat", "lng"],
+                        "properties": {
+                            "lat": {
+                                "type": "number"
+                            },
+                            "lng": {
+                                "type": "number"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "contact"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": ["name"]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "buttons"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": ["buttons"],
+                        "properties": {
+                            "buttons": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": {
+                                    "$ref": "#/$defs/button"
+                                }
+                            },
+                            "persist": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "card"
+                            }
+                        }
+                    },
+                    "then": {
+                        "properties": {
+                            "buttons": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/$defs/button"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "system"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": ["text"]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "template"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": ["template"],
+                        "properties": {
+                            "params": {
+                                "type": "object"
+                            }
+                        }
+                    }
+                }
+            ],
+            "required": ["type"],
+            "properties": {
+                "type": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "text",
+                                "image",
+                                "video",
+                                "audio",
+                                "file",
+                                "location",
+                                "contact",
+                                "buttons",
+                                "link",
+                                "card",
+                                "system",
+                                "template"
+                            ]
+                        },
+                        {
+                            "$ref": "#/$defs/namespaced"
+                        }
+                    ]
+                },
+                "fallback": {
+                    "type": "string"
+                }
+            }
+        },
+        "conversationCapabilities": {
+            "type": "object",
+            "description": "Missing capabilities are off; namespaced keys are extension capabilities with an object value (section 6.3).",
+            "properties": {
+                "attachments": {
+                    "anyOf": [
+                        {
+                            "const": false
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "types": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "maxSize": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            }
+                        }
+                    ]
+                },
+                "receipts": {
+                    "type": "boolean"
+                },
+                "typing": {
+                    "type": "boolean"
+                },
+                "presence": {
+                    "type": "boolean"
+                },
+                "streaming": {
+                    "type": "boolean"
+                },
+                "buttons": {
+                    "type": "boolean"
+                },
+                "replies": {
+                    "type": "boolean"
+                },
+                "reactions": {
+                    "type": "boolean"
+                },
+                "edit": {
+                    "type": "boolean"
+                },
+                "delete": {
+                    "type": "boolean"
+                },
+                "history": {
+                    "type": "boolean"
+                },
+                "composer": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "anyOf": [
+                                {
+                                    "enum": [
+                                        "free",
+                                        "templates",
+                                        "actions",
+                                        "closed"
+                                    ]
+                                },
+                                {
+                                    "$ref": "#/$defs/namespaced"
+                                }
+                            ]
+                        },
+                        "templates": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["id"],
+                                "properties": {
+                                    "id": {
+                                        "$ref": "#/$defs/id"
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "preview": {
+                                        "type": "string"
+                                    },
+                                    "params": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "maxLength": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "placeholder": {
+                            "type": "string"
+                        },
+                        "reason": {
+                            "type": "string"
+                        }
+                    }
+                }
             },
-            "data": {
-              "required": [
-                "conversation",
-                "clientId",
-                "parts"
-              ],
-              "properties": {
+            "patternProperties": {
+                "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$": {
+                    "type": "object"
+                }
+            }
+        },
+        "clientCapabilities": {
+            "type": "object",
+            "properties": {
                 "parts": {
-                  "type": "array",
-                  "minItems": 1,
-                  "items": {
-                    "$ref": "#/$defs/part"
-                  }
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "streaming": {
+                    "type": "boolean"
+                },
+                "formats": {
+                    "type": "array",
+                    "items": {
+                        "enum": ["plain", "markdown"]
+                    }
                 }
-              }
-            }
-          },
-          "required": [
-            "id"
-          ]
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "message.edit"
             },
-            "data": {
-              "required": [
-                "id",
-                "parts"
-              ]
-            }
-          },
-          "required": [
-            "id"
-          ]
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "message.delete"
-              ]
-            },
-            "data": {
-              "required": [
-                "id"
-              ]
-            }
-          },
-          "required": [
-            "id"
-          ]
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "message.react"
-            },
-            "data": {
-              "required": [
-                "id",
-                "emoji",
-                "active"
-              ]
-            }
-          },
-          "required": [
-            "id"
-          ]
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "message.read"
-            },
-            "data": {
-              "required": [
-                "conversation",
-                "until"
-              ]
-            }
-          },
-          "required": [
-            "id"
-          ]
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "action"
-            },
-            "data": {
-              "required": [
-                "conversation",
-                "message",
-                "button"
-              ]
-            }
-          },
-          "required": [
-            "id"
-          ]
-        },
-        {
-          "properties": {
-            "type": {
-              "const": "history.fetch"
-            },
-            "data": {
-              "required": [
-                "conversation"
-              ],
-              "properties": {
-                "limit": {
-                  "type": "integer",
-                  "minimum": 1
+            "patternProperties": {
+                "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$": {
+                    "type": "object"
                 }
-              }
             }
-          },
-          "required": [
-            "id"
-          ]
         },
-        {
-          "description": "Any other type: an extension (namespaced), or one of a later minor version. Ignored by those who don't know it (section 3.1).",
-          "properties": {
-            "type": {
-              "not": {
-                "enum": [
-                  "ack",
-                  "action",
-                  "conversation.close",
-                  "conversation.created",
-                  "conversation.open",
-                  "conversation.removed",
-                  "conversation.updated",
-                  "error",
-                  "hello",
-                  "history",
-                  "history.fetch",
-                  "message.created",
-                  "message.delete",
-                  "message.delta",
-                  "message.edit",
-                  "message.react",
-                  "message.read",
-                  "message.send",
-                  "message.updated",
-                  "presence",
-                  "read",
-                  "ready",
-                  "typing"
-                ]
-              }
-            }
-          }
+        "frame": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/extensible"
+                }
+            ],
+            "required": ["type", "data"],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "id": {
+                    "$ref": "#/$defs/id"
+                },
+                "seq": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ref": {
+                    "$ref": "#/$defs/id"
+                },
+                "data": {
+                    "type": "object"
+                }
+            },
+            "description": "The data of the protocol's own events and commands is checked below; any other (namespaced) type passes with any data (must-ignore).",
+            "oneOf": [
+                {
+                    "properties": {
+                        "type": {
+                            "const": "hello"
+                        },
+                        "data": {
+                            "required": ["protocol"],
+                            "properties": {
+                                "protocol": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "capabilities": {
+                                    "$ref": "#/$defs/clientCapabilities"
+                                },
+                                "resume": {
+                                    "type": "object",
+                                    "properties": {
+                                        "seq": {
+                                            "type": "integer"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "ready"
+                        },
+                        "data": {
+                            "required": ["protocol", "me"],
+                            "properties": {
+                                "protocol": {
+                                    "type": "string"
+                                },
+                                "me": {
+                                    "$ref": "#/$defs/participant"
+                                },
+                                "conversations": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/$defs/conversation"
+                                    }
+                                },
+                                "resumed": {
+                                    "type": "boolean"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "ack"
+                        }
+                    },
+                    "required": ["ref"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "error"
+                        },
+                        "data": {
+                            "$ref": "#/$defs/error"
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "enum": ["conversation.created"]
+                        },
+                        "data": {
+                            "$ref": "#/$defs/conversation"
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "enum": [
+                                "conversation.updated",
+                                "conversation.removed"
+                            ]
+                        },
+                        "data": {
+                            "required": ["id"]
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "message.created"
+                        },
+                        "data": {
+                            "$ref": "#/$defs/message"
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "message.updated"
+                        },
+                        "data": {
+                            "required": ["id", "conversation"],
+                            "properties": {
+                                "parts": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/$defs/part"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "message.delta"
+                        },
+                        "data": {
+                            "required": ["id", "conversation", "part", "text"],
+                            "properties": {
+                                "part": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "text": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "typing"
+                        },
+                        "data": {
+                            "required": ["conversation", "active"],
+                            "properties": {
+                                "active": {
+                                    "type": "boolean"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "read"
+                        },
+                        "data": {
+                            "required": ["conversation", "until"]
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "presence"
+                        },
+                        "data": {
+                            "required": ["participant", "status"],
+                            "properties": {
+                                "status": {
+                                    "enum": ["online", "away", "offline"]
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "history"
+                        },
+                        "data": {
+                            "required": ["conversation", "messages", "more"],
+                            "properties": {
+                                "messages": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/$defs/message"
+                                    }
+                                },
+                                "more": {
+                                    "type": "boolean"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "enum": ["conversation.open", "conversation.close"]
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "message.send"
+                        },
+                        "data": {
+                            "required": ["conversation", "clientId", "parts"],
+                            "properties": {
+                                "parts": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "items": {
+                                        "$ref": "#/$defs/part"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "message.edit"
+                        },
+                        "data": {
+                            "required": ["id", "parts"]
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "enum": ["message.delete"]
+                        },
+                        "data": {
+                            "required": ["id"]
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "message.react"
+                        },
+                        "data": {
+                            "required": ["id", "emoji", "active"]
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "message.read"
+                        },
+                        "data": {
+                            "required": ["conversation", "until"]
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "action"
+                        },
+                        "data": {
+                            "required": ["conversation", "message", "button"]
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "const": "history.fetch"
+                        },
+                        "data": {
+                            "required": ["conversation"],
+                            "properties": {
+                                "limit": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                }
+                            }
+                        }
+                    },
+                    "required": ["id"]
+                },
+                {
+                    "description": "Any other type: an extension (namespaced), or one of a later minor version. Ignored by those who don't know it (section 3.1).",
+                    "properties": {
+                        "type": {
+                            "not": {
+                                "enum": [
+                                    "ack",
+                                    "action",
+                                    "conversation.close",
+                                    "conversation.created",
+                                    "conversation.open",
+                                    "conversation.removed",
+                                    "conversation.updated",
+                                    "error",
+                                    "hello",
+                                    "history",
+                                    "history.fetch",
+                                    "message.created",
+                                    "message.delete",
+                                    "message.delta",
+                                    "message.edit",
+                                    "message.react",
+                                    "message.read",
+                                    "message.send",
+                                    "message.updated",
+                                    "presence",
+                                    "read",
+                                    "ready",
+                                    "typing"
+                                ]
+                            }
+                        }
+                    }
+                }
+            ]
         }
-      ]
     }
-  }
 }

@@ -9,7 +9,8 @@
  * Properties:
  *   client     a ChatClient (client.js)
  *   texts      the interface's texts, merged over TEXTS (translations)
- *   uploader   async (file) => part: makes attachments possible
+ *   uploader   async (file, conversation) => part: makes attachments
+ *              possible (a failed upload dispatches "uploaderror")
  *
  * It renders with DOM nodes and classes (chat.css), no HTML strings, so it
  * works under a strict Content Security Policy.
@@ -211,7 +212,11 @@ export class ChatThread extends HTMLElement {
         const author = participants.get(message.author);
         const own = message.author !== undefined && message.author === me;
         const system = this.isSystem(message, participants);
-        const kind = system ? "system" : own ? "own" : author?.kind ?? "contact";
+        const kind = system
+            ? "system"
+            : own
+              ? "own"
+              : (author?.kind ?? "contact");
         const node = element("article", `chat-message chat-message--${kind}`);
         node.dataset.id = message.id;
         if (continued) node.classList.add("chat-message--continued");
@@ -269,7 +274,11 @@ export class ChatThread extends HTMLElement {
                     .catch(() => {}),
             );
             meta.append(retry);
-        } else if (own && message.status && (receipts || message.status === "sending")) {
+        } else if (
+            own &&
+            message.status &&
+            (receipts || message.status === "sending")
+        ) {
             const status = element(
                 "span",
                 `chat-status chat-status--${message.status}`,
@@ -314,7 +323,9 @@ export class ChatThread extends HTMLElement {
         if (mode === "free") {
             this.composer.replaceChildren(...this.freeComposer(conversation));
         } else if (mode === "templates") {
-            this.composer.replaceChildren(...this.templateComposer(conversation));
+            this.composer.replaceChildren(
+                ...this.templateComposer(conversation),
+            );
         } else {
             const note = element(
                 "div",
@@ -337,7 +348,11 @@ export class ChatThread extends HTMLElement {
         input.setAttribute("aria-label", input.placeholder);
         if (composer.maxLength) input.maxLength = composer.maxLength;
         input.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+            if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.isComposing
+            ) {
                 event.preventDefault();
                 this.submit();
             }
@@ -351,7 +366,14 @@ export class ChatThread extends HTMLElement {
             file.type = "file";
             file.hidden = true;
             file.accept = types
-                .map((type) => ({ image: "image/*", video: "video/*", audio: "audio/*" })[type] ?? "")
+                .map(
+                    (type) =>
+                        ({
+                            image: "image/*",
+                            video: "video/*",
+                            audio: "audio/*",
+                        })[type] ?? "",
+                )
                 .filter(Boolean)
                 .join(",");
             file.addEventListener("change", () => this.attach(file));
@@ -372,7 +394,11 @@ export class ChatThread extends HTMLElement {
         select.name = "template";
         select.setAttribute("aria-label", this._texts.template);
         for (const template of templates) {
-            const option = element("option", null, template.name ?? template.id);
+            const option = element(
+                "option",
+                null,
+                template.name ?? template.id,
+            );
             option.value = template.id;
             select.append(option);
         }
@@ -387,12 +413,17 @@ export class ChatThread extends HTMLElement {
                     input.placeholder = name;
                     input.setAttribute("aria-label", name);
                     input.addEventListener("input", () => {
-                        preview.textContent = this.templateText(template, params);
+                        preview.textContent = this.templateText(
+                            template,
+                            params,
+                        );
                     });
                     return input;
                 }),
             );
-            preview.textContent = template ? this.templateText(template, params) : "";
+            preview.textContent = template
+                ? this.templateText(template, params)
+                : "";
         };
         select.addEventListener("change", refresh);
         refresh();
@@ -422,10 +453,13 @@ export class ChatThread extends HTMLElement {
     templateText(template, params) {
         const values = this.templateValues(params);
         const names = template.params ?? [];
-        return (template.preview ?? "").replace(/\{\{(\w+)\}\}/g, (match, key) => {
-            const name = /^\d+$/.test(key) ? names[Number(key) - 1] : key;
-            return values[name] || match;
-        });
+        return (template.preview ?? "").replace(
+            /\{\{(\w+)\}\}/g,
+            (match, key) => {
+                const name = /^\d+$/.test(key) ? names[Number(key) - 1] : key;
+                return values[name] || match;
+            },
+        );
     }
 
     submit() {
@@ -438,7 +472,8 @@ export class ChatThread extends HTMLElement {
             this.stopTyping();
             this.send([{ type: "text", text }]);
         } else if (mode === "templates") {
-            const templates = conversation.capabilities.composer.templates ?? [];
+            const templates =
+                conversation.capabilities.composer.templates ?? [];
             const select = this.composer.querySelector("select");
             const template = templates.find((item) => item.id === select.value);
             if (!template) return;
@@ -464,7 +499,15 @@ export class ChatThread extends HTMLElement {
         const [file] = input.files ?? [];
         if (!file) return;
         input.value = "";
-        const part = await this.uploader(file);
+        let part;
+        try {
+            part = await this.uploader(file, this._store.id);
+        } catch (error) {
+            this.dispatchEvent(
+                new CustomEvent("uploaderror", { detail: { file, error } }),
+            );
+            return;
+        }
         if (part) this.send([part]);
     }
 

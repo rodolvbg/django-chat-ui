@@ -8,11 +8,19 @@
 import "../src/django_chat_ui/static/django_chat_ui/chat-inbox.js";
 import "../src/django_chat_ui/static/django_chat_ui/chat-widget.js";
 import { ChatClient } from "../src/django_chat_ui/static/django_chat_ui/client.js";
-import { FakeServer, MemoryTransport } from "../src/django_chat_ui/static/django_chat_ui/transports/memory.js";
+import {
+    FakeServer,
+    MemoryTransport,
+} from "../src/django_chat_ui/static/django_chat_ui/transports/memory.js";
 
 const me = { id: "p_me", kind: "agent", name: "Rodolfo" };
 const bot = { id: "p_bot", kind: "bot", name: "Asistente" };
-const ana = { id: "p_ana", kind: "contact", name: "Ana García", handle: "+34 600 000 000" };
+const ana = {
+    id: "p_ana",
+    kind: "contact",
+    name: "Ana García",
+    handle: "+34 600 000 000",
+};
 const lucia = { id: "p_lucia", kind: "user", name: "Lucía Martín" };
 const minutesAgo = (n) => new Date(Date.now() - n * 60000).toISOString();
 
@@ -22,13 +30,34 @@ server.addConversation(
         id: "conv_bot",
         channel: "bot",
         participants: [me, bot],
-        capabilities: { streaming: true, buttons: true, composer: { mode: "free", placeholder: "Pregunta algo…" } },
+        capabilities: {
+            streaming: true,
+            buttons: true,
+            composer: { mode: "free", placeholder: "Pregunta algo…" },
+        },
     },
     [
-        { id: "b1", conversation: "conv_bot", author: "p_bot", createdAt: minutesAgo(5), parts: [
-            { type: "text", format: "markdown", text: "¡Hola! Soy el **asistente**. ¿En qué te ayudo?" },
-            { type: "buttons", buttons: [{ id: "order", label: "Mi pedido" }, { id: "human", label: "Hablar con alguien" }], fallback: "Mi pedido / Hablar con alguien" },
-        ] },
+        {
+            id: "b1",
+            conversation: "conv_bot",
+            author: "p_bot",
+            createdAt: minutesAgo(5),
+            parts: [
+                {
+                    type: "text",
+                    format: "markdown",
+                    text: "¡Hola! Soy el **asistente**. ¿En qué te ayudo?",
+                },
+                {
+                    type: "buttons",
+                    buttons: [
+                        { id: "order", label: "Mi pedido" },
+                        { id: "human", label: "Hablar con alguien" },
+                    ],
+                    fallback: "Mi pedido / Hablar con alguien",
+                },
+            ],
+        },
     ],
 );
 server.addConversation(
@@ -36,13 +65,52 @@ server.addConversation(
         id: "conv_wa",
         channel: "whatsapp",
         participants: [me, ana],
-        capabilities: { receipts: true, typing: true, attachments: { types: ["image", "file"] }, composer: { mode: "free" } },
+        capabilities: {
+            receipts: true,
+            typing: true,
+            attachments: { types: ["image", "file"] },
+            composer: { mode: "free" },
+        },
     },
     [
-        { id: "w1", conversation: "conv_wa", author: "p_ana", createdAt: minutesAgo(30), parts: [{ type: "text", text: "Hola, ¿tenéis la talla M?" }] },
-        { id: "w2", conversation: "conv_wa", author: "p_me", createdAt: minutesAgo(28), status: "read", parts: [{ type: "text", text: "¡Sí! Te paso la foto." }] },
-        { id: "w3", conversation: "conv_wa", author: "p_me", createdAt: minutesAgo(28), status: "read", parts: [{ type: "image", url: "shirt.svg", alt: "Camiseta azul, talla M", width: 240, height: 150 }] },
-        { id: "w4", conversation: "conv_wa", author: "p_ana", createdAt: minutesAgo(27), parts: [{ type: "text", text: "Perfecto, gracias 🙌" }] },
+        {
+            id: "w1",
+            conversation: "conv_wa",
+            author: "p_ana",
+            createdAt: minutesAgo(30),
+            parts: [{ type: "text", text: "Hola, ¿tenéis la talla M?" }],
+        },
+        {
+            id: "w2",
+            conversation: "conv_wa",
+            author: "p_me",
+            createdAt: minutesAgo(28),
+            status: "read",
+            parts: [{ type: "text", text: "¡Sí! Te paso la foto." }],
+        },
+        {
+            id: "w3",
+            conversation: "conv_wa",
+            author: "p_me",
+            createdAt: minutesAgo(28),
+            status: "read",
+            parts: [
+                {
+                    type: "image",
+                    url: "shirt.svg",
+                    alt: "Camiseta azul, talla M",
+                    width: 240,
+                    height: 150,
+                },
+            ],
+        },
+        {
+            id: "w4",
+            conversation: "conv_wa",
+            author: "p_ana",
+            createdAt: minutesAgo(27),
+            parts: [{ type: "text", text: "Perfecto, gracias 🙌" }],
+        },
     ],
 );
 
@@ -53,10 +121,25 @@ server.addConversation(
         title: "Equipo de soporte",
         participants: [me, lucia],
         unread: 1,
-        capabilities: { receipts: true, typing: true, composer: { mode: "free" } },
+        capabilities: {
+            receipts: true,
+            typing: true,
+            composer: { mode: "free" },
+        },
     },
     [
-        { id: "t1", conversation: "conv_team", author: "p_lucia", createdAt: minutesAgo(12), parts: [{ type: "text", text: "¿Puedes mirar el pedido A-1029? El cliente pregunta por el envío." }] },
+        {
+            id: "t1",
+            conversation: "conv_team",
+            author: "p_lucia",
+            createdAt: minutesAgo(12),
+            parts: [
+                {
+                    type: "text",
+                    text: "¿Puedes mirar el pedido A-1029? El cliente pregunta por el envío.",
+                },
+            ],
+        },
     ],
 );
 
@@ -69,25 +152,61 @@ async function botSays(chunks, buttons) {
     await server.stream("conv_bot", "p_bot", chunks, {
         parts: [
             { type: "text", format: "markdown", text: chunks.join("") },
-            ...(buttons ? [{ type: "buttons", buttons, fallback: buttons.map((b) => b.label).join(" / ") }] : []),
+            ...(buttons
+                ? [
+                      {
+                          type: "buttons",
+                          buttons,
+                          fallback: buttons.map((b) => b.label).join(" / "),
+                      },
+                  ]
+                : []),
         ],
     });
 }
 
 server.onAction = (data) => {
     // The reply chosen, as the user's message (as WhatsApp shows it).
-    const message = server.messages.get(data.conversation).find((m) => m.id === data.message);
-    const button = message.parts.flatMap((part) => part.buttons ?? []).find((b) => b.id === data.button);
-    server.post(data.conversation, me.id, [{ type: "text", text: button?.label ?? data.button }], { status: "sent" });
+    const message = server.messages
+        .get(data.conversation)
+        .find((m) => m.id === data.message);
+    const button = message.parts
+        .flatMap((part) => part.buttons ?? [])
+        .find((b) => b.id === data.button);
+    server.post(
+        data.conversation,
+        me.id,
+        [{ type: "text", text: button?.label ?? data.button }],
+        { status: "sent" },
+    );
     botSays(answers[data.button] ?? ["Vale."]);
 };
 server.onMessage = (message) => {
     if (message.conversation === "conv_bot") {
-        botSays(["Déjame ", "mirarlo… ", "¿Es sobre un pedido?"], [{ id: "order", label: "Sí, un pedido" }]);
+        botSays(
+            ["Déjame ", "mirarlo… ", "¿Es sobre un pedido?"],
+            [{ id: "order", label: "Sí, un pedido" }],
+        );
     } else if (message.conversation === "conv_wa") {
         // WhatsApp: delivered, then read, then the window closes.
-        setTimeout(() => server.emit("message.updated", { id: message.id, conversation: "conv_wa", status: "delivered" }), 600);
-        setTimeout(() => server.emit("message.updated", { id: message.id, conversation: "conv_wa", status: "read" }), 1400);
+        setTimeout(
+            () =>
+                server.emit("message.updated", {
+                    id: message.id,
+                    conversation: "conv_wa",
+                    status: "delivered",
+                }),
+            600,
+        );
+        setTimeout(
+            () =>
+                server.emit("message.updated", {
+                    id: message.id,
+                    conversation: "conv_wa",
+                    status: "read",
+                }),
+            1400,
+        );
     }
 };
 
@@ -102,27 +221,55 @@ const visitor = { id: "p_visitor", kind: "user", name: "Tú" };
 const site = new FakeServer({ me: visitor });
 site.newConversation = {
     participants: [visitor, bot],
-    capabilities: { streaming: true, buttons: true, composer: { mode: "free", placeholder: "Escribe tu duda…" } },
+    capabilities: {
+        streaming: true,
+        buttons: true,
+        composer: { mode: "free", placeholder: "Escribe tu duda…" },
+    },
 };
 site.onStart = (conversation) => {
     setTimeout(() => {
         site.post(conversation.id, bot.id, [
             { type: "text", text: "¡Hola! ¿En qué podemos ayudarte?" },
-            { type: "buttons", buttons: [{ id: "order", label: "Mi pedido" }, { id: "human", label: "Hablar con alguien" }], fallback: "Mi pedido / Hablar con alguien" },
+            {
+                type: "buttons",
+                buttons: [
+                    { id: "order", label: "Mi pedido" },
+                    { id: "human", label: "Hablar con alguien" },
+                ],
+                fallback: "Mi pedido / Hablar con alguien",
+            },
         ]);
     }, 300);
 };
 site.onAction = (data) => {
-    const message = site.messages.get(data.conversation).find((m) => m.id === data.message);
-    const button = message.parts.flatMap((part) => part.buttons ?? []).find((b) => b.id === data.button);
-    site.post(data.conversation, visitor.id, [{ type: "text", text: button?.label ?? data.button }], { status: "sent" });
+    const message = site.messages
+        .get(data.conversation)
+        .find((m) => m.id === data.message);
+    const button = message.parts
+        .flatMap((part) => part.buttons ?? [])
+        .find((b) => b.id === data.button);
+    site.post(
+        data.conversation,
+        visitor.id,
+        [{ type: "text", text: button?.label ?? data.button }],
+        { status: "sent" },
+    );
     site.stream(data.conversation, bot.id, answers[data.button] ?? ["Vale."], {
-        parts: [{ type: "text", format: "markdown", text: (answers[data.button] ?? ["Vale."]).join("") }],
+        parts: [
+            {
+                type: "text",
+                format: "markdown",
+                text: (answers[data.button] ?? ["Vale."]).join(""),
+            },
+        ],
     });
 };
 site.onMessage = (message) => {
     const chunks = ["Gracias, ", "una persona ", "te contesta enseguida."];
-    site.stream(message.conversation, bot.id, chunks, { parts: [{ type: "text", text: chunks.join("") }] });
+    site.stream(message.conversation, bot.id, chunks, {
+        parts: [{ type: "text", text: chunks.join("") }],
+    });
 };
 const visitorClient = new ChatClient(new MemoryTransport(site));
 const widget = document.querySelector("chat-widget");
@@ -144,7 +291,13 @@ window.demo = {
                     mode: "templates",
                     reason: "Han pasado más de 24 horas desde el último mensaje de Ana: solo plantillas.",
                     templates: [
-                        { id: "followup", name: "Seguimiento", preview: "Hola {{1}}, ¿podemos ayudarte en algo más?", params: ["nombre"] },
+                        {
+                            id: "followup",
+                            name: "Seguimiento",
+                            preview:
+                                "Hola {{1}}, ¿podemos ayudarte en algo más?",
+                            params: ["nombre"],
+                        },
                     ],
                 },
             },

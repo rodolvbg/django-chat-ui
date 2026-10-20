@@ -224,7 +224,8 @@ function size(bytes) {
 registerPart("file", (part) => {
     const file = element("div", "chat-file");
     file.append(link(part.url, part.name ?? part.url));
-    if (part.size) file.append(element("span", "chat-file-size", size(part.size)));
+    if (part.size)
+        file.append(element("span", "chat-file-size", size(part.size)));
     return file;
 });
 
@@ -237,7 +238,8 @@ registerPart("location", (part) => {
             label,
         ),
     );
-    if (part.address) place.append(element("div", "chat-location-address", part.address));
+    if (part.address)
+        place.append(element("div", "chat-location-address", part.address));
     return place;
 });
 
@@ -265,7 +267,9 @@ registerPart("link", (part) => {
     }
     preview.append(link(part.url, part.title ?? part.url));
     if (part.description) {
-        preview.append(element("div", "chat-link-description", part.description));
+        preview.append(
+            element("div", "chat-link-description", part.description),
+        );
     }
     return preview;
 });

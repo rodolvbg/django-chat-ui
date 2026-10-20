@@ -1,0 +1,4 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'django_chat_ui/chat.css' %}">
+{{ config|json_script:"chat-ui-config" }}
+<script type="module" src="{% static 'django_chat_ui/boot.js' %}"></script>

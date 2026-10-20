@@ -51,6 +51,7 @@ export class ChatWidget extends HTMLElement {
     constructor() {
         super();
         this._client = null;
+        this._uploader = null;
         this._texts = WIDGET_TEXTS;
         this.onChange = () => this.renderBadge();
         this.onKey = (event) => {
@@ -74,6 +75,16 @@ export class ChatWidget extends HTMLElement {
         client.addEventListener("conversations", this.onChange);
         if (this.thread) this.thread.client = client;
         this.renderBadge();
+    }
+
+    /** The uploader of its thread (see <chat-thread>). */
+    get uploader() {
+        return this._uploader;
+    }
+
+    set uploader(uploader) {
+        this._uploader = uploader;
+        if (this.thread) this.thread.uploader = uploader;
     }
 
     get texts() {
@@ -143,6 +154,7 @@ export class ChatWidget extends HTMLElement {
         header.append(titles, this.closer);
         this.thread = document.createElement("chat-thread");
         if (this._client) this.thread.client = this._client;
+        if (this._uploader) this.thread.uploader = this._uploader;
         this.panel.append(header, this.thread);
         this.append(this.panel, this.launcher);
     }
@@ -155,7 +167,10 @@ export class ChatWidget extends HTMLElement {
         this.subheading.textContent = this.getAttribute("subheading") ?? "";
         this.subheading.hidden = !this.subheading.textContent;
         this.panel.setAttribute("aria-label", heading);
-        this.launcher.setAttribute("aria-label", this.isOpen ? texts.close : texts.open);
+        this.launcher.setAttribute(
+            "aria-label",
+            this.isOpen ? texts.close : texts.open,
+        );
         this.closer.setAttribute("aria-label", texts.close);
     }
 
@@ -199,7 +214,9 @@ export class ChatWidget extends HTMLElement {
             remember(this.getAttribute("storage-key"), id);
         }
         if (id) this.thread.setAttribute("conversation", id);
-        this.dispatchEvent(new CustomEvent("open", { detail: { conversation: id } }));
+        this.dispatchEvent(
+            new CustomEvent("open", { detail: { conversation: id } }),
+        );
         this.thread.querySelector(".chat-input")?.focus();
     }
 

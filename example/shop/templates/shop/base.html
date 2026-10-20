@@ -1,0 +1,21 @@
+{% load chat_ui static %}
+<!doctype html>
+<html lang="{{ LANGUAGE_CODE|default:'es' }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Tienda{% endblock %}</title>
+    {% chat_ui %}
+    <link rel="stylesheet" href="{% static 'shop/shop.css' %}">
+  </head>
+  <body>
+    <header class="shop-header">
+      <a href="{% url 'home' %}">Tienda</a>
+      <nav>
+        {% if user.is_staff %}<a href="{% url 'inbox' %}">Bandeja</a>{% endif %}
+        <a href="{% url 'admin:index' %}">Admin</a>
+      </nav>
+    </header>
+    {% block content %}{% endblock %}
+  </body>
+</html>

@@ -27,7 +27,10 @@ describe("ConversationStore", () => {
         });
         store.apply({
             type: "conversation.updated",
-            data: { id: "c1", capabilities: { composer: { mode: "templates" } } },
+            data: {
+                id: "c1",
+                capabilities: { composer: { mode: "templates" } },
+            },
         });
 
         expect(store.conversation.title).toBe("Ana");
@@ -35,7 +38,9 @@ describe("ConversationStore", () => {
             receipts: true,
             composer: { mode: "templates" },
         });
-        expect(store.conversation.capabilities.composer).toEqual({ mode: "templates" });
+        expect(store.conversation.capabilities.composer).toEqual({
+            mode: "templates",
+        });
     });
 
     it("ignores other conversations and unknown events", () => {
@@ -43,15 +48,44 @@ describe("ConversationStore", () => {
         const change = vi.fn();
         store.addEventListener("change", change);
 
-        expect(store.apply({ type: "conversation.updated", data: { id: "c2" } })).toBe(false);
-        expect(store.apply({ type: "conversation.created", data: { id: "c2" } })).toBe(false);
-        expect(store.apply({ type: "message.created", data: { ...message("m", 1), conversation: "c2" } })).toBe(false);
-        for (const type of ["message.updated", "message.delta", "typing", "read", "history"]) {
-            expect(store.apply({ type, data: { conversation: "c2" } })).toBe(false);
+        expect(
+            store.apply({ type: "conversation.updated", data: { id: "c2" } }),
+        ).toBe(false);
+        expect(
+            store.apply({ type: "conversation.created", data: { id: "c2" } }),
+        ).toBe(false);
+        expect(
+            store.apply({
+                type: "message.created",
+                data: { ...message("m", 1), conversation: "c2" },
+            }),
+        ).toBe(false);
+        for (const type of [
+            "message.updated",
+            "message.delta",
+            "typing",
+            "read",
+            "history",
+        ]) {
+            expect(store.apply({ type, data: { conversation: "c2" } })).toBe(
+                false,
+            );
         }
-        expect(store.apply({ type: "acme.order.shipped", data: {} })).toBe(false);
-        expect(store.apply({ type: "message.updated", data: { conversation: "c1", id: "nope" } })).toBe(false);
-        expect(store.apply({ type: "message.delta", data: { conversation: "c1", id: "nope" } })).toBe(false);
+        expect(store.apply({ type: "acme.order.shipped", data: {} })).toBe(
+            false,
+        );
+        expect(
+            store.apply({
+                type: "message.updated",
+                data: { conversation: "c1", id: "nope" },
+            }),
+        ).toBe(false);
+        expect(
+            store.apply({
+                type: "message.delta",
+                data: { conversation: "c1", id: "nope" },
+            }),
+        ).toBe(false);
         expect(store.apply({ type: "typing" })).toBe(false);
         expect(change).not.toHaveBeenCalled();
     });
@@ -86,28 +120,62 @@ describe("ConversationStore", () => {
 
     it("updates messages, and streams text into them", () => {
         const store = new ConversationStore("c1");
-        store.apply({ type: "message.created", data: message("m", 1, { parts: [], streaming: true }) });
-        store.apply({ type: "message.delta", data: { conversation: "c1", id: "m", part: 0, text: "Hel" } });
-        store.apply({ type: "message.delta", data: { conversation: "c1", id: "m", part: 0, text: "lo" } });
-        expect(store.find("m").parts).toEqual([{ type: "text", text: "Hello" }]);
+        store.apply({
+            type: "message.created",
+            data: message("m", 1, { parts: [], streaming: true }),
+        });
+        store.apply({
+            type: "message.delta",
+            data: { conversation: "c1", id: "m", part: 0, text: "Hel" },
+        });
+        store.apply({
+            type: "message.delta",
+            data: { conversation: "c1", id: "m", part: 0, text: "lo" },
+        });
+        expect(store.find("m").parts).toEqual([
+            { type: "text", text: "Hello" },
+        ]);
 
-        store.apply({ type: "message.updated", data: { conversation: "c1", id: "m", streaming: false, status: "read" } });
-        expect(store.find("m")).toMatchObject({ streaming: false, status: "read" });
+        store.apply({
+            type: "message.updated",
+            data: {
+                conversation: "c1",
+                id: "m",
+                streaming: false,
+                status: "read",
+            },
+        });
+        expect(store.find("m")).toMatchObject({
+            streaming: false,
+            status: "read",
+        });
 
         store.find("m").parts.push({ type: "image", url: "https://x/i.png" });
         expect(
-            store.apply({ type: "message.delta", data: { conversation: "c1", id: "m", part: 1, text: "x" } }),
+            store.apply({
+                type: "message.delta",
+                data: { conversation: "c1", id: "m", part: 1, text: "x" },
+            }),
         ).toBe(false);
     });
 
     it("follows typing and reading", () => {
         const store = new ConversationStore("c1");
-        store.apply({ type: "typing", data: { conversation: "c1", participant: "p_a", active: true } });
+        store.apply({
+            type: "typing",
+            data: { conversation: "c1", participant: "p_a", active: true },
+        });
         expect([...store.typing]).toEqual(["p_a"]);
-        store.apply({ type: "typing", data: { conversation: "c1", participant: "p_a", active: false } });
+        store.apply({
+            type: "typing",
+            data: { conversation: "c1", participant: "p_a", active: false },
+        });
         expect(store.typing.size).toBe(0);
 
-        store.apply({ type: "read", data: { conversation: "c1", participant: "p_a", until: "m" } });
+        store.apply({
+            type: "read",
+            data: { conversation: "c1", participant: "p_a", until: "m" },
+        });
         expect(store.readUntil.get("p_a")).toBe("m");
     });
 
@@ -116,19 +184,30 @@ describe("ConversationStore", () => {
         store.apply({ type: "message.created", data: message("new", 9) });
         store.apply({
             type: "history",
-            data: { conversation: "c1", messages: [message("old", 1), message("new", 9)], before: "old", more: true },
+            data: {
+                conversation: "c1",
+                messages: [message("old", 1), message("new", 9)],
+                before: "old",
+                more: true,
+            },
         });
         expect(store.messages.map((m) => m.id)).toEqual(["old", "new"]);
         expect([store.more, store.before]).toEqual([true, "old"]);
 
-        store.apply({ type: "history", data: { conversation: "c1", more: false } });
+        store.apply({
+            type: "history",
+            data: { conversation: "c1", more: false },
+        });
         expect([store.more, store.before]).toEqual([false, null]);
     });
 
     it("maps its participants", () => {
         const store = new ConversationStore("c1");
         expect(store.participants.size).toBe(0);
-        store.apply({ type: "conversation.created", data: { id: "c1", participants: [{ id: "p_a", kind: "bot" }] } });
+        store.apply({
+            type: "conversation.created",
+            data: { id: "c1", participants: [{ id: "p_a", kind: "bot" }] },
+        });
         expect(store.participants.get("p_a").kind).toBe("bot");
     });
 });

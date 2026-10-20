@@ -517,14 +517,25 @@ The protocol is the same over any transport. Three are defined:
 
 - **Events:** `GET <base>/events` — a
   [Server-Sent Events](https://html.spec.whatwg.org/multipage/server-sent-events.html)
-  stream: each frame is one SSE message, `event: <type>`, `id: <seq>`,
-  `data: <frame JSON>`. Reconnection uses the browser's `Last-Event-ID`,
-  which works as `hello.resume`.
-- **Commands:** `POST <base>/commands` with one frame (or an array of
-  frames) as JSON. The response body MAY carry the `ack`/`error` frames
-  directly; they are also sent on the stream.
-- `hello` is the first command; until `ready`, the stream sends only
-  `ready` and `error`.
+  stream: each frame is one SSE message, `id: <seq>`, `data: <frame JSON>`,
+  **without an event name**, so a client gets every type, its own and
+  extensions', in `onmessage`. The stream starts after `?after=<seq>`
+  (what `hello.resume` has), or after the browser's `Last-Event-ID` when it
+  reconnects by itself, or else from now on.
+- A server MAY send an `id:` alone, past events that weren't for this
+  client, so a reconnection doesn't read them again; and comments (`:`) to
+  keep the connection alive. It MAY end the stream at any time: the client
+  reconnects, losing nothing.
+- **Commands:** `POST <base>/commands` with one frame, or an array of
+  frames, as JSON. The response is the array of the frames that answer
+  them, for this client only: each one's `ack` or `error` (`ready` for
+  `hello`), after what it asked for (the `conversation.created` and
+  `history` of `conversation.open`, the `history` of `history.fetch`).
+  They carry `ref`, not `seq`, and aren't repeated on the stream; the
+  events a command causes for everyone (`message.created`…) come on the
+  stream.
+- A client opens the stream first and then sends `hello`, so it misses
+  nothing in between.
 
 It needs no WebSocket server, and works under a strict Content Security
 Policy (`connect-src 'self'`).
@@ -536,9 +547,16 @@ The first client frame is `hello`.
 
 ### 10.3 Polling
 
-`POST <base>/commands` as above, and `GET <base>/events?after=<seq>`
-returning a JSON array of frames. For environments without long-lived
-connections.
+`POST <base>/commands` as above, and `GET <base>/events?after=<seq>` (with
+`Accept: application/json`) answering at once with what came after:
+
+```json
+{ "frames": [ { "type": "typing", "seq": 1043, "data": { } } ], "seq": 1050 }
+```
+
+`seq` is where the next poll starts: past the client's events and the
+others'. Without `after`, `frames` is empty and `seq` is now. For
+environments without long-lived connections.
 
 ## 11. Security
 
