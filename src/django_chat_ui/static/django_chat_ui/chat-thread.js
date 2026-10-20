@@ -105,8 +105,8 @@ export class ChatThread extends HTMLElement {
 
     bind() {
         const id = this.getAttribute("conversation");
+        // Connected, it's built (connectedCallback).
         if (!this._client || !id || !this.isConnected) return;
-        if (!this.shell) this.build();
         this._store?.removeEventListener("change", this.onChange);
         this._store = this._client.conversation(id);
         this._store.addEventListener("change", this.onChange);
@@ -653,7 +653,7 @@ export class ChatThread extends HTMLElement {
     }
 
     async attach(input) {
-        const [file] = input.files ?? [];
+        const [file] = input.files;
         if (!file) return;
         input.value = "";
         let part;

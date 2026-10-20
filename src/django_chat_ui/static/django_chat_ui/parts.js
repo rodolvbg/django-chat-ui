@@ -56,9 +56,10 @@ export function safeUrl(url) {
 }
 
 function link(url, text) {
+    const label = text ?? url ?? "";
     const href = safeUrl(url);
-    if (!href) return document.createTextNode(text ?? url ?? "");
-    const anchor = element("a", null, text ?? url);
+    if (!href) return document.createTextNode(label);
+    const anchor = element("a", null, label);
     anchor.href = href;
     anchor.target = "_blank";
     anchor.rel = "noopener noreferrer";
@@ -209,8 +210,8 @@ registerPart("audio", (part) => {
     return audio;
 });
 
+/** A file's size for people (only called with one). */
 function size(bytes) {
-    if (!bytes) return "";
     const units = ["B", "KB", "MB", "GB"];
     let value = bytes;
     let unit = 0;
@@ -283,9 +284,12 @@ registerPart("card", (part, context) => {
         img.alt = "";
         card.append(img);
     }
-    if (part.title) {
+    if (part.title || part.url) {
+        // Its link, under its title (or as it, without one).
         const title = element("div", "chat-card-title");
-        title.append(part.url ? link(part.url, part.title) : part.title);
+        title.append(
+            part.url ? link(part.url, part.title ?? part.url) : part.title,
+        );
         card.append(title);
     }
     if (part.text) card.append(plain(part.text));

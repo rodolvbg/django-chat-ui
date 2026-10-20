@@ -125,7 +125,8 @@ export class ChatClient extends EventTarget {
         } else if (frame.type === "ack") {
             this.settle(frame.ref, frame.data);
         } else if (frame.type === "error") {
-            this.settle(frame.ref, null, frame.data);
+            // An error without its data is still an error.
+            this.settle(frame.ref, null, frame.data ?? {});
         }
         this.route(frame);
         this.dispatchEvent(new CustomEvent("frame", { detail: frame }));
@@ -198,7 +199,7 @@ export class ChatClient extends EventTarget {
                 ...(replyTo ? { replyTo } : {}),
             });
         } catch (error) {
-            store.fail(clientId, error.detail ?? { message: String(error) });
+            store.fail(clientId, error.detail);
             throw error;
         }
         return clientId;

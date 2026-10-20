@@ -144,7 +144,8 @@ describe("boot.js", () => {
             "fetch",
             vi.fn(() => Promise.reject(new Error("offline"))),
         );
-        page("", {
+        // A configuration without texts: the components keep their own.
+        page("<chat-thread></chat-thread>", {
             events: "/e",
             commands: "/c",
             uploads: "/u",
@@ -153,6 +154,7 @@ describe("boot.js", () => {
         });
         await import("../../src/django_chat_ui/static/django_chat_ui/boot.js");
         await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(document.querySelector("chat-thread").texts.send).toBe("Send");
         expect(error).toHaveBeenCalledWith(
             "django-chat-ui: can't connect.",
             expect.any(Error),

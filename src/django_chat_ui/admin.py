@@ -48,11 +48,15 @@ class ConversationAdmin(admin.ModelAdmin):
     inlines = [MembershipInline, MessageInline]
 
 
-# This package's models, unless a site swapped them for its own.
-if not Participant._meta.swapped:
-    admin.site.register(Participant, ParticipantAdmin)
-if not Conversation._meta.swapped:
-    admin.site.register(Conversation, ConversationAdmin)
+def register_models(site: admin.AdminSite) -> None:
+    """This package's models, unless a site swapped them for its own."""
+    if not Participant._meta.swapped:
+        site.register(Participant, ParticipantAdmin)
+    if not Conversation._meta.swapped:
+        site.register(Conversation, ConversationAdmin)
+
+
+register_models(admin.site)
 
 
 @admin.register(Message)

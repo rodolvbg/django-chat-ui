@@ -53,7 +53,7 @@ export function preview(message, texts) {
 }
 
 function initials(name) {
-    return (name ?? "?")
+    return name
         .split(/\s+/)
         .slice(0, 2)
         .map((word) => word[0] ?? "")
@@ -228,7 +228,7 @@ export class ChatInbox extends HTMLElement {
         const others = (conversation.participants ?? []).filter(
             (p) => p.id !== me,
         );
-        return conversation.title ?? others.map((p) => p.name).join(", ") ?? "";
+        return conversation.title ?? others.map((p) => p.name).join(", ");
     }
 
     subtitle(store) {

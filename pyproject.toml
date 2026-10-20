@@ -137,6 +137,7 @@ ini_options.DJANGO_SETTINGS_MODULE = "tests.settings"
 run.branch = true
 run.omit = [ "*/migrations/*" ]
 run.source = [ "django_chat_ui" ]
+report.fail_under = 100
 report.show_missing = true
 report.skip_covered = true
 
