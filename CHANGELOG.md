@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of `AbstractConversation` and `AbstractParticipant`; their fields reach
   the interface through `ChatBackend.serialize_conversation()` and
   `serialize_participant()`.
+- `services.stream_text()`: a message written as an AI model streams it,
+  its chunks sent together, finished when they end or fail.
 - Reactions: shown under the messages, and added from a picker, in the
   conversations whose `reactions` capability allows them (any emoji, or a
   list).

@@ -225,3 +225,61 @@ def test_errors_without_a_message():
     error = protocol.ProtocolError("internal", retry=True)
     assert error.data() == {"code": "internal", "retry": True}
     assert str(error) == "internal"
+
+
+def deltas(after):
+    return [e.data["text"] for e in events(after) if e.type == "message.delta"]
+
+
+def test_stream_text_sends_the_chunks_together(agent, conversation, seq):
+    message = services.stream_text(
+        conversation, agent, iter(["ab", "cd", "ef", "g"]), size=5, every=60
+    )
+    # 4 letters wait; 6 go; what's left goes at the end.
+    assert deltas(seq) == ["abcdef", "g"]
+    message.refresh_from_db()
+    assert message.streaming is False
+    assert message.parts == [{"type": "text", "text": "abcdefg", "format": "markdown"}]
+
+
+def test_stream_text_sends_them_in_time(agent, conversation, seq):
+    # The clock: when it starts, at each chunk, and when it sends.
+    times = iter([0, 0.05, 0.2, 0.2, 0.25, 0.4, 0.4, 0.4])
+    services.stream_text(
+        conversation, agent, ["a", "b", "c", "d"], every=0.1, clock=lambda: next(times)
+    )
+    # Started at 0: "a" at 0.05 waits, "b" at 0.2 goes with it, "c" at 0.25
+    # waits, "d" at 0.4 goes with it.
+    assert deltas(seq) == ["ab", "cd"]
+
+
+def test_stream_text_then_more_parts(agent, conversation):
+    buttons = {"type": "buttons", "buttons": [{"id": "y", "label": "Yes"}]}
+    message = services.stream_text(
+        conversation, agent, ["Shall I?"], markdown=False, then=[buttons]
+    )
+    assert message.parts == [{"type": "text", "text": "Shall I?"}, buttons]
+
+
+def test_stream_text_finishes_when_the_chunks_fail(agent, conversation, seq):
+    def broken():
+        yield "Your order "
+        raise ConnectionError("the model went away")
+
+    with pytest.raises(ConnectionError):
+        services.stream_text(conversation, agent, broken(), size=1)
+
+    message = conversation.messages.get()
+    assert message.streaming is False
+    assert message.parts == [
+        {"type": "text", "text": "Your order ", "format": "markdown"}
+    ]
+
+    # Nothing came at all: no text part.
+    def nothing():
+        raise ConnectionError
+        yield  # pragma: no cover
+
+    with pytest.raises(ConnectionError):
+        services.stream_text(conversation, agent, nothing())
+    assert conversation.messages.last().parts == []

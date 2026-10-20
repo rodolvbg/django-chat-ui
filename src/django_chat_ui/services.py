@@ -12,6 +12,7 @@ delivering a message or a receipt, an assignment rule adding an agent.
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any, cast
 
 from django.db import transaction
@@ -29,7 +30,7 @@ from .models import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
 
 def emit(
@@ -306,6 +307,60 @@ def finish(message: Message, parts: list[dict[str, Any]] | None = None) -> Messa
     return update_message(
         message, streaming=False, parts=message.parts if parts is None else parts
     )
+
+
+def stream_text(
+    conversation: AbstractConversation,
+    author: AbstractParticipant,
+    chunks: Iterable[str],
+    *,
+    markdown: bool = True,
+    then: list[dict[str, Any]] | None = None,
+    every: float = 0.1,
+    size: int = 200,
+    clock: Callable[[], float] = time.monotonic,
+) -> Message:
+    """A message written as ``chunks`` come: what an AI model streams.
+
+    The chunks are sent together, every ``every`` seconds or ``size``
+    characters (a model's are a few letters each: one event apiece would
+    fill the stream and the database). When they end, the message is
+    finished: its text (``markdown``, or plain), then the parts of ``then``
+    (quick replies, say). If they fail, it's finished with what came, and
+    the error goes on.
+
+        with client.messages.stream(...) as stream:
+            services.stream_text(conversation, bot, stream.text_stream)
+    """
+    message = start_stream(conversation, author)
+    text = ""
+    pending = ""
+    sent = clock()
+
+    def flush() -> None:
+        nonlocal pending, sent
+        if pending:
+            delta(message, pending)
+            pending = ""
+        sent = clock()
+
+    def final() -> list[dict[str, Any]]:
+        part: dict[str, Any] = {"type": "text", "text": text}
+        if markdown:
+            part["format"] = "markdown"
+        return [part, *(then or [])] if text else list(then or [])
+
+    try:
+        for chunk in chunks:
+            text += chunk
+            pending += chunk
+            if len(pending) >= size or clock() - sent >= every:
+                flush()
+    except BaseException:
+        finish(message, final())
+        raise
+    flush()
+    return finish(message, final())
 
 
 # Who is typing, and who read what --------------------------------------------

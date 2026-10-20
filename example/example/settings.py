@@ -86,7 +86,11 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 LOGIN_URL = "admin:login"
 
-CHAT_UI = {"BACKEND": "shop.chat.DemoBackend"}
+CHAT_UI = {
+    "BACKEND": "shop.chat.DemoBackend",
+    # New events read every 0.1 s: an assistant's words flow, not jump.
+    "POLL_INTERVAL": 0.1,
+}
 
 # The shop's own models of the chat (helpdesk/models.py): its
 # conversations are tickets (with a priority and an assignee), its

@@ -218,6 +218,40 @@ services.update_conversation(
 Also `create_conversation`, `add_participant`, `remove_participant`,
 `system`, `typing`, `read`, and `emit` for the events of extensions.
 
+### An AI that answers as it writes
+
+Like ChatGPT's: the answer appears in its bubble as the model writes it.
+`services.stream_text()` takes the chunks a model streams, sends them
+together (every 0.1 s or 200 characters: a model's are a few letters each,
+and each one sent is a row of the events), and finishes the message when
+they end, or when they fail (with what came; the error goes on):
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+
+
+class Backend(ChatBackend):
+    hooks = "thread"  # the visitor's message is sent at once; the answer, after
+
+    def on_message(self, request, message):
+        if message.author.kind == "bot":
+            return
+        with client.messages.stream(
+            model="claude-opus-5-5",
+            max_tokens=1024,
+            system="You are the assistant of a shop…",
+            messages=history(message.conversation),  # your mapping of the messages
+        ) as stream:
+            services.stream_text(message.conversation, bot, stream.text_stream)
+```
+
+`then=[{"type": "buttons", ...}]` adds parts after the text (quick
+replies), and `markdown=False` sends it as plain text. For the words to
+flow rather than jump, read the events more often: `"POLL_INTERVAL": 0.1`.
+A client that doesn't stream gets the finished message only.
+
 ### Settings
 
 ```python
@@ -307,7 +341,10 @@ python -m http.server
 ```
 
 The Django example: a shop with the widget for its visitors (an assistant
-greets them, streaming) and an inbox for its staff.
+greets them, streaming) and an inbox for its staff. With
+`ANTHROPIC_API_KEY` set (and `pip install anthropic`), the assistant
+answers what visitors write with Claude (`ANTHROPIC_MODEL` to choose
+another model); without, it says someone will answer.
 
 ```bash
 python example/manage.py migrate
