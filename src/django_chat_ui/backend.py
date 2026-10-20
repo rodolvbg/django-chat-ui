@@ -7,12 +7,15 @@ they can start and what happens when someone writes. Subclass
 
 from __future__ import annotations
 
+import logging
+import threading
 from collections.abc import Callable
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import connections, transaction
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
 
@@ -25,6 +28,8 @@ if TYPE_CHECKING:
 
 SESSION_KEY = "django_chat_ui_participant"
 
+logger = logging.getLogger("django_chat_ui")
+
 #: A command of an extension: ``(backend, request, participant, data)`` →
 #: the ``ack``'s data, or a list of frames ending with it.
 CommandHandler = Callable[["ChatBackend", "HttpRequest", Participant, dict], Any]
@@ -35,6 +40,14 @@ class ChatBackend:
     #: widget of a public site). Each gets a participant kept in their
     #: session.
     allow_anonymous = False
+
+    #: Where the hooks that react (``on_start``, ``on_message``,
+    #: ``on_action``) run: ``"inline"``, inside the request of the command,
+    #: or ``"thread"``, in a thread of their own once the command's changes
+    #: are committed, so the command is answered at once (a bot that takes
+    #: seconds doesn't hold the sender's message). For a task queue,
+    #: override ``run_hook()``.
+    hooks = "inline"
 
     #: Commands of extensions, by their namespaced type (section 12).
     commands: dict[str, CommandHandler] = {}
@@ -112,7 +125,7 @@ class ChatBackend:
             state="open" if others else "pending",
             capabilities=self.new_capabilities(channel),
         )
-        self.on_start(request, conversation, participant)
+        self.run_hook(self.on_start, request, conversation, participant)
         return conversation
 
     def support_team(self, channel: str) -> list[Participant]:
@@ -137,6 +150,39 @@ class ChatBackend:
 
     # What happens ----------------------------------------------------------
 
+    def run_hook(self, hook: Callable[..., Any], *args: Any) -> None:
+        """Run a hook that reacts to a command, as ``hooks`` says. Override
+        it to send them to a task queue (Celery, ``django.tasks``…)."""
+        if self.hooks == "thread":
+            transaction.on_commit(
+                lambda: threading.Thread(
+                    target=self.run_hook_now, args=(hook, *args), daemon=True
+                ).start()
+            )
+        else:
+            hook(*args)
+
+    def run_hook_now(self, hook: Callable[..., Any], *args: Any) -> None:
+        """Run a hook away from its request: its failure is logged, and its
+        thread's database connection closed."""
+        try:
+            hook(*args)
+        except Exception:
+            logger.exception("django-chat-ui: %s failed", hook.__name__)
+        finally:
+            connections.close_all()
+
+    def before_send(
+        self,
+        request: HttpRequest,
+        conversation: Conversation,
+        participant: Participant,
+        parts: list[dict[str, Any]],
+    ) -> None:
+        """Just before a message is added (its parts checked): what must
+        come first in the thread ("Ana joined"), or a last refusal (raise
+        ``ProtocolError``). Always inline."""
+
     def on_start(
         self, request: HttpRequest, conversation: Conversation, participant: Participant
     ) -> None:
@@ -144,8 +190,7 @@ class ChatBackend:
 
     def on_message(self, request: HttpRequest, message: Message) -> None:
         """After someone sent a message: a bot's answer, sending it on to
-        WhatsApp… Long work belongs in a task queue: this runs inside the
-        request of the command."""
+        WhatsApp… It runs as ``hooks`` says."""
 
     def on_action(
         self,

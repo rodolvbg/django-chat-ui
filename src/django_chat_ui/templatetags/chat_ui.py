@@ -20,21 +20,26 @@ from ..texts import texts
 
 register = template.Library()
 
+TRANSPORTS = {"sse", "polling", "websocket"}
+
 
 @register.inclusion_tag("django_chat_ui/chat_ui.html", takes_context=True)
 def chat_ui(
     context: template.Context, transport: str = "sse", poll: int = 3000
 ) -> dict[str, Any]:
-    """``transport``: ``sse`` (Server-Sent Events) or ``polling`` (every
-    ``poll`` milliseconds, where long-lived connections can't be had)."""
+    """``transport``: ``sse`` (Server-Sent Events), ``polling`` (every
+    ``poll`` milliseconds, where long-lived connections can't be had) or
+    ``websocket`` (with Channels: ``django_chat_ui.routing``)."""
     request = context.get("request")
+    commands = reverse("django_chat_ui:commands")
     return {
         "config": {
             "events": reverse("django_chat_ui:events"),
-            "commands": reverse("django_chat_ui:commands"),
+            "commands": commands,
+            "websocket": commands.removesuffix("commands") + "ws",
             "uploads": reverse("django_chat_ui:uploads"),
             "csrfToken": get_token(request) if request is not None else "",
-            "transport": "polling" if transport == "polling" else "sse",
+            "transport": transport if transport in TRANSPORTS else "sse",
             "poll": int(poll),
             "texts": texts(),
         },

@@ -166,7 +166,10 @@ export class ChatThread extends HTMLElement {
         );
         if (!last || last.id === this.readSent || document.hidden) return;
         this.readSent = last.id;
-        this._client.read(this._store.id, last.id).catch(() => {});
+        this._client.read(this._store.id, last.id).catch(() => {
+            // Told again on the next render.
+            if (this.readSent === last.id) this.readSent = null;
+        });
     }
 
     renderEarlier() {

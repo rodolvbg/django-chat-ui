@@ -12,6 +12,9 @@ pytestmark = pytest.mark.django_db
 def demo(settings, monkeypatch):
     settings.CHAT_UI = {**settings.CHAT_UI, "BACKEND": "shop.chat.DemoBackend"}
     monkeypatch.setattr("shop.chat.time.sleep", lambda seconds: None)
+    # Its hooks in the request here (in a thread, they wait for a commit
+    # that a test's transaction never makes).
+    monkeypatch.setattr("shop.chat.DemoBackend.hooks", "inline")
 
 
 def texts(conversation):
@@ -37,7 +40,7 @@ def test_a_visitor_is_greeted_and_answered(client, agent):
         "bot",
     }
     greeting = conversation.messages.get()
-    assert greeting.parts[1]["buttons"][0] == {"id": "order", "label": "Mi pedido"}
+    assert greeting.parts[1]["buttons"][0] == {"id": "order", "label": "My order"}
 
     chat.ok(
         "action",
@@ -48,8 +51,8 @@ def test_a_visitor_is_greeted_and_answered(client, agent):
         },
     )
     assert texts(conversation)[1:] == [
-        "Mi pedido",
-        "Tu pedido **A-1029** sale hoy con MRW.",
+        "My order",
+        "Your order **A-1029** ships today with UPS.",
     ]
 
     chat.ok(
@@ -57,13 +60,10 @@ def test_a_visitor_is_greeted_and_answered(client, agent):
         {
             "conversation": str(conversation.pk),
             "clientId": "c1",
-            "parts": [{"type": "text", "text": "¿Y la talla M?"}],
+            "parts": [{"type": "text", "text": "And in size M?"}],
         },
     )
-    assert (
-        texts(conversation)[-1]
-        == "Gracias. Una persona del equipo te contesta enseguida."
-    )
+    assert texts(conversation)[-1] == "Thanks. Someone will answer you shortly."
 
 
 def test_the_staff_takes_over(agent_chat, agent, customer):
@@ -75,19 +75,19 @@ def test_the_staff_takes_over(agent_chat, agent, customer):
         {
             "conversation": str(conversation.pk),
             "clientId": "c1",
-            "parts": [{"type": "text", "text": "Hola"}],
+            "parts": [{"type": "text", "text": "Hi"}],
         },
     )
     conversation.refresh_from_db()
     assert conversation.state == "open"
-    assert texts(conversation) == ["Hola", "Rodolfo se ha unido"]
+    assert texts(conversation) == ["Rodolfo joined", "Hi"]
     # Once open, nobody joins again, and the assistant stays quiet.
     agent_chat.ok(
         "message.send",
         {
             "conversation": str(conversation.pk),
             "clientId": "c2",
-            "parts": [{"type": "text", "text": "¿Algo más?"}],
+            "parts": [{"type": "text", "text": "Anything else?"}],
         },
     )
     assert len(texts(conversation)) == 3
@@ -106,7 +106,7 @@ def test_demo_chat_fills_the_example(capsys):
 
     call_command("demo_chat")
     assert Conversation.objects.count() == 2
-    assert Participant.objects.filter(kind="contact", name="Ana García").exists()
+    assert Participant.objects.filter(kind="contact", name="Anna Smith").exists()
     call_command("demo_chat")  # Again: the users are there already.
     assert "admin / demo" in capsys.readouterr().out
 

@@ -45,10 +45,29 @@ def command(name: str) -> Callable[[Handler], Handler]:
     return register
 
 
+#: Where a session keeps its client's capabilities, from its ``hello``.
+CLIENT_KEY = "django_chat_ui_client"
+
+
+def client_capabilities(request: HttpRequest) -> dict[str, Any] | None:
+    """What the client of this request said it renders (6.2), if it did."""
+    session = getattr(request, "session", None)
+    return session.get(CLIENT_KEY) if session is not None else None
+
+
 def handle(
     backend: ChatBackend, request: HttpRequest, participant: Participant, raw: Any
 ) -> Answer:
-    """Answer one command frame."""
+    """Answer one command frame, as its client can take the answers."""
+    answers = answer(backend, request, participant, raw)
+    capabilities = client_capabilities(request)
+    degraded = (protocol.degrade(frame, capabilities) for frame in answers)
+    return [frame for frame in degraded if frame is not None]
+
+
+def answer(
+    backend: ChatBackend, request: HttpRequest, participant: Participant, raw: Any
+) -> Answer:
     if not isinstance(raw, dict) or not isinstance(raw.get("type"), str):
         return [frame("error", ProtocolError("bad_request", _("Not a frame.")).data())]
     ref = raw.get("id")
@@ -315,6 +334,11 @@ def hello(self: Command, data: dict[str, Any]) -> Answer:
     if not common:
         raise ProtocolError("unsupported", _("No version of the protocol in common."))
     chosen = max(common, key=lambda v: tuple(int(n) for n in v.split(".")))
+    capabilities = data.get("capabilities")
+    session = getattr(self.request, "session", None)
+    if isinstance(capabilities, dict) and session is not None:
+        # What the server sends this client, from now on, is for it (6.2).
+        session[CLIENT_KEY] = capabilities
 
     resume = data.get("resume")
     if not isinstance(resume, dict):
@@ -401,6 +425,7 @@ def message_send(self: Command, data: dict[str, Any]) -> Answer:
     if data.get("replyTo") is not None:
         require(conversation, "replies")
         reply_to = self.message(conversation, data["replyTo"])
+    self.backend.before_send(self.request, conversation, self.participant, parts)
     try:
         message = services.post(
             conversation,
@@ -411,7 +436,7 @@ def message_send(self: Command, data: dict[str, Any]) -> Answer:
         )
     except IntegrityError:
         return [self.ack()]  # The same clientId, at the same time.
-    self.backend.on_message(self.request, message)
+    self.backend.run_hook(self.backend.on_message, self.request, message)
     return [self.ack()]
 
 
@@ -481,7 +506,9 @@ def action(self: Command, data: dict[str, Any]) -> Answer:
     button = next((b for b in buttons if b.get("id") == data.get("button")), None)
     if button is None:
         raise ProtocolError("not_found", _("There is no such button."))
-    self.backend.on_action(self.request, self.participant, message, button)
+    self.backend.run_hook(
+        self.backend.on_action, self.request, self.participant, message, button
+    )
     return [self.ack()]
 
 

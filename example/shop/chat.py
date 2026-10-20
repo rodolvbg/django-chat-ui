@@ -18,26 +18,26 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
 MENU = [
-    {"id": "order", "label": "Mi pedido"},
-    {"id": "sizes", "label": "Tallas"},
-    {"id": "human", "label": "Hablar con alguien"},
+    {"id": "order", "label": "My order"},
+    {"id": "sizes", "label": "Sizes"},
+    {"id": "human", "label": "Talk to someone"},
 ]
 
 ANSWERS = {
-    "order": ["Tu pedido ", "**A-1029** ", "sale hoy ", "con MRW."],
+    "order": ["Your order ", "**A-1029** ", "ships today ", "with UPS."],
     "sizes": [
-        "Las camisetas ",
-        "tallan normal: ",
-        "si dudas, ",
-        "coge tu talla de siempre.",
+        "Our T-shirts ",
+        "run true to size: ",
+        "if in doubt, ",
+        "take your usual one.",
     ],
-    "human": ["Te paso ", "con una persona ", "del equipo, ", "en un momento."],
+    "human": ["Putting you through ", "to someone ", "on the team, ", "one moment."],
 }
 
 
 def assistant() -> Participant:
     bot, _ = Participant.objects.get_or_create(
-        kind="bot", handle="shop-assistant", defaults={"name": "Asistente"}
+        kind="bot", handle="shop-assistant", defaults={"name": "Assistant"}
     )
     return bot
 
@@ -54,6 +54,8 @@ def say(conversation: Conversation, chunks: list[str], delay: float = 0.12) -> M
 
 class DemoBackend(ChatBackend):
     allow_anonymous = True
+    # The assistant takes its time: the visitor's message is sent at once.
+    hooks = "thread"
 
     def new_capabilities(self, channel: str) -> dict[str, Any]:
         return {**super().new_capabilities(channel), "buttons": True, "streaming": True}
@@ -68,7 +70,7 @@ class DemoBackend(ChatBackend):
             [
                 {
                     "type": "text",
-                    "text": "¡Hola! Soy el asistente de la tienda. ¿En qué te ayudo?",
+                    "text": "Hi! I'm the shop's assistant. How can I help?",
                 },
                 {
                     "type": "buttons",
@@ -80,19 +82,22 @@ class DemoBackend(ChatBackend):
 
     def on_action(self, request, participant, message, button) -> None:
         super().on_action(request, participant, message, button)  # Their answer.
-        say(message.conversation, ANSWERS.get(button["id"], ["Vale."]))
+        say(message.conversation, ANSWERS.get(button["id"], ["OK."]))
+
+    def before_send(self, request, conversation, participant, parts) -> None:
+        if participant.kind == "agent" and conversation.state == "pending":
+            # Someone of the team answers: it's theirs now, and it says so
+            # before their first message.
+            services.update_conversation(conversation, state="open")
+            services.system(conversation, f"{participant.name} joined", code="joined")
 
     def on_message(self, request: HttpRequest, message: Message) -> None:
         conversation = message.conversation
         author = message.author
-        if author is None:
+        if author is None or conversation.state != "pending":
             return
-        if author.kind == "agent" and conversation.state == "pending":
-            # Someone of the team answered: it's theirs now.
-            services.update_conversation(conversation, state="open")
-            services.system(conversation, f"{author.name} se ha unido", code="joined")
-        elif author.kind in {"contact", "user"} and conversation.state == "pending":
+        if author.kind in {"contact", "user"}:
             say(
                 conversation,
-                ["Gracias. ", "Una persona del equipo ", "te contesta enseguida."],
+                ["Thanks. ", "Someone will ", "answer you shortly."],
             )

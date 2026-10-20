@@ -10,6 +10,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": _DB,
         "TEST": {"NAME": _DB},
+        "OPTIONS": SQLITE_OPTIONS,  # noqa: F405
     }
 }
 ROOT_URLCONF = "example.urls"

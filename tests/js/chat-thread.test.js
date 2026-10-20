@@ -359,6 +359,24 @@ describe("<chat-thread> with WhatsApp", () => {
         expect(reads).toHaveLength(1);
         expect(reads[0].data.until).toBe(messages(thread)[0].dataset.id);
     });
+
+    it("says it read again when telling failed", async () => {
+        const { client, server, thread } = await setup({
+            conversations: [[whatsapp]],
+            thread: "conv_wa",
+        });
+        const read = vi
+            .spyOn(client, "read")
+            .mockRejectedValueOnce(new Error("locked"));
+        server.post("conv_wa", "p_ana", [{ type: "text", text: "Hola" }]);
+        await flush();
+        thread.render();
+        await flush();
+        expect(read).toHaveBeenCalledTimes(2);
+        expect(
+            server.received.filter((f) => f.type === "message.read"),
+        ).toHaveLength(1);
+    });
 });
 
 describe("<chat-thread>", () => {

@@ -14,6 +14,7 @@ import "./chat-inbox.js";
 import "./chat-widget.js";
 import { ChatClient } from "./client.js";
 import { HttpTransport, httpUploader } from "./transports/http.js";
+import { WebSocketTransport } from "./transports/websocket.js";
 
 function readConfig() {
     const node = document.getElementById("chat-ui-config");
@@ -27,16 +28,19 @@ function readConfig() {
 
 export const config = readConfig();
 
-export const client = config
-    ? new ChatClient(
-          new HttpTransport({
-              events: config.events,
-              commands: config.commands,
-              csrfToken: config.csrfToken,
-              poll: config.transport === "polling" ? config.poll : 0,
-          }),
-      )
-    : null;
+function transport() {
+    if (config.transport === "websocket") {
+        return new WebSocketTransport({ url: config.websocket });
+    }
+    return new HttpTransport({
+        events: config.events,
+        commands: config.commands,
+        csrfToken: config.csrfToken,
+        poll: config.transport === "polling" ? config.poll : 0,
+    });
+}
+
+export const client = config ? new ChatClient(transport()) : null;
 
 const uploader = config
     ? httpUploader({ uploads: config.uploads, csrfToken: config.csrfToken })

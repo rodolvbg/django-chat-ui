@@ -277,10 +277,10 @@ def delta(message: Message, text: str, part: int = 0) -> None:
 
 def finish(message: Message, parts: list[dict[str, Any]] | None = None) -> Message:
     """The end of a streamed message; ``parts`` replace what accumulated."""
-    changes: dict[str, Any] = {"streaming": False}
-    if parts is not None:
-        changes["parts"] = parts
-    return update_message(message, **changes)
+    # Its parts always: a client that doesn't stream got no deltas.
+    return update_message(
+        message, streaming=False, parts=message.parts if parts is None else parts
+    )
 
 
 # Who is typing, and who read what --------------------------------------------

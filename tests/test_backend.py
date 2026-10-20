@@ -70,3 +70,87 @@ def test_a_visitor_chats_through_the_session(settings, agent):
 
 class OpenBackend(ChatBackend):
     allow_anonymous = True
+
+
+class ThreadBackend(ChatBackend):
+    hooks = "thread"
+    seen: list = []
+
+    def on_message(self, request, message):
+        from django_chat_ui.models import Message
+
+        # Its own connection: it sees what the command committed.
+        self.seen.append(Message.objects.get(pk=message.pk).parts)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_hooks_in_a_thread_after_the_commit(settings, monkeypatch):
+    import threading
+
+    from django_chat_ui import services
+    from tests.conftest import Chat
+
+    settings.CHAT_UI = {
+        **settings.CHAT_UI,
+        "BACKEND": "tests.test_backend.ThreadBackend",
+    }
+    started = []
+    real = threading.Thread
+
+    def thread(*args, **kwargs):
+        started.append(real(*args, **kwargs))
+        return started[-1]
+
+    monkeypatch.setattr("django_chat_ui.backend.threading.Thread", thread)
+    user = User.objects.create_user("t")
+    client = Client()
+    client.force_login(user)
+    me = ChatBackend().participant_for_user(user)
+    conversation = services.create_conversation(
+        [me], capabilities={"composer": {"mode": "free"}}
+    )
+
+    Chat(client).ok(
+        "message.send",
+        {
+            "conversation": str(conversation.pk),
+            "clientId": "c",
+            "parts": [{"type": "text", "text": "Hi"}],
+        },
+    )
+    [hook] = started
+    hook.join(5)
+    assert ThreadBackend.seen == [[{"type": "text", "text": "Hi"}]]
+    assert hook.daemon is True
+
+
+def test_a_failing_hook_is_logged(caplog):
+    def broken():
+        raise ValueError("boom")
+
+    ChatBackend().run_hook_now(broken)
+    assert "django-chat-ui: broken failed" in caplog.text
+
+
+def test_before_send_can_refuse(customer_chat, conversation, settings):
+    settings.CHAT_UI = {
+        **settings.CHAT_UI,
+        "BACKEND": "tests.test_backend.QuietBackend",
+    }
+    [error] = customer_chat(
+        "message.send",
+        {
+            "conversation": str(conversation.pk),
+            "clientId": "c",
+            "parts": [{"type": "text", "text": "shout"}],
+        },
+    )
+    assert error["data"]["code"] == "forbidden"
+    assert conversation.messages.count() == 0
+
+
+class QuietBackend(ChatBackend):
+    def before_send(self, request, conversation, participant, parts):
+        from django_chat_ui.protocol import ProtocolError
+
+        raise ProtocolError("forbidden", "Not now.")

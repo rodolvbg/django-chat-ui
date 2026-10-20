@@ -234,9 +234,11 @@ export class ChatInbox extends HTMLElement {
     subtitle(store) {
         const conversation = store.conversation;
         const me = this._client?.me?.id;
-        const contact = (conversation.participants ?? []).find(
-            (p) => p.id !== me && p.handle,
+        // How the channel knows whoever is outside (not a bot's handle).
+        const others = (conversation.participants ?? []).filter(
+            (p) => p.id !== me && p.handle && p.kind !== "bot",
         );
+        const contact = others.find((p) => p.kind === "contact") ?? others[0];
         return [conversation.channel, contact?.handle]
             .filter(Boolean)
             .join(" · ");

@@ -94,9 +94,11 @@ export class ConversationStore extends EventTarget {
     insert(message) {
         const own = message.clientId && this.findByClientId(message.clientId);
         if (own) {
-            // The server's copy of an optimistic message: same place.
+            // The server's copy of an optimistic message, at the server's
+            // time: what the server put before it (a "joined") goes first.
             Object.assign(own, message);
             delete own.error;
+            this.messages.sort(byTime);
             return;
         }
         if (this.find(message.id)) {

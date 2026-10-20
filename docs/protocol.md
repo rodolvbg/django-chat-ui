@@ -133,9 +133,9 @@ Extensions MAY version themselves too, in their capability (6.3):
 {
   "id": "p_7",
   "kind": "contact",
-  "name": "Ana García",
+  "name": "Anna Smith",
   "avatar": "https://example.com/a/7.png",
-  "handle": "+34 600 000 000",
+  "handle": "+1 555 0100",
   "ext": {},
   "meta": {}
 }
@@ -158,8 +158,8 @@ The client learns which participant it is from `ready.me` (8.2).
 {
   "id": "conv_1",
   "channel": "whatsapp",
-  "title": "Ana García",
-  "participants": [ { "id": "p_7", "kind": "contact", "name": "Ana García" } ],
+  "title": "Anna Smith",
+  "participants": [ { "id": "p_7", "kind": "contact", "name": "Anna Smith" } ],
   "capabilities": { "receipts": true, "composer": { "mode": "free" } },
   "unread": 2,
   "lastMessage": { "...": "a Message (4.3), maybe without its parts" },
@@ -191,7 +191,7 @@ The client learns which participant it is from `ready.me` (8.2).
   "clientId": "c_9f2",
   "conversation": "conv_1",
   "author": "p_7",
-  "parts": [ { "type": "text", "text": "Hola" } ],
+  "parts": [ { "type": "text", "text": "Hi" } ],
   "status": "delivered",
   "replyTo": "m_100",
   "createdAt": "2026-10-20T10:00:00Z",
@@ -265,7 +265,7 @@ silently dropped.
 | `buttons` | `buttons`: `{ id, label, style? }[]` (required), `persist` (boolean) | Quick replies: clicking sends an `action` command (7.3). Without `persist`, they hide once one is used or another message comes. `style`: `primary`, `secondary`, `danger`. |
 | `link` | `url` (required), `title`, `description`, `image` | A link preview. |
 | `card` | `title`, `text`, `image`, `buttons` (as above), `url` | Rich card, as bots send. |
-| `system` | `text` (required), `code` | An event in the thread ("Ana joined", "Assigned to support"). `code` is machine-readable. |
+| `system` | `text` (required), `code` | An event in the thread ("Anna joined", "Assigned to support"). `code` is machine-readable. |
 | `template` | `template` (id, required), `params` (object) | A pre-approved message, for `composer.mode: "templates"` (6.1, 13.2). Its `fallback` is the rendered text. |
 
 Attachments that are being uploaded MAY carry `progress` (0–1) client-side.
@@ -348,8 +348,10 @@ Sent by the client in `hello` (8.1): what it can render and handle.
 ```
 
 A server SHOULD use them to degrade what it sends: a `card` as text and
-links for a client without it, a `markdown` text as `plain`. It MUST NOT
-assume a client renders a part type it didn't list.
+links for a client without it, a `markdown` text as `plain`, any other
+part as its `fallback`. It MUST NOT assume a client renders a part type it
+didn't list. A client without `streaming` gets no `message.delta`: it
+shows a streamed message when its final `message.updated` comes.
 
 ### 6.3 Extension capabilities
 
@@ -405,8 +407,9 @@ Everything that travels is a frame:
 
 A streamed message: `message.created` with `streaming: true` (its parts
 MAY be empty or partial), then any number of `message.delta`, then
-`message.updated` with `streaming: false` and, optionally, the final
-`parts` (which replace the accumulated ones).
+`message.updated` with `streaming: false` and the final `parts` (which
+replace the accumulated ones; a server SHOULD always send them, for the
+clients that got no deltas).
 
 ### 7.3 Commands (client → server)
 
@@ -543,7 +546,14 @@ Policy (`connect-src 'self'`).
 ### 10.2 WebSocket
 
 One frame per WebSocket text message, both directions, on `<base>/ws`.
-The first client frame is `hello`.
+
+- The first client frame is `hello`. The server answers with `ready`, and
+  then starts the stream of events: after `hello.resume.seq` if it could
+  resume (`resumed: true`), or from now on.
+- The answers to commands (`ack`, `error`, and what they asked for) and
+  the events travel on the same socket; answers carry `ref`, events `seq`.
+- A client that reconnects says `hello` again, with the last `seq` it got.
+- A server closes a connection it can't authenticate with code `4401`.
 
 ### 10.3 Polling
 
@@ -606,15 +616,15 @@ Guidelines:
 ### 13.1 A chatbot answering in streaming, with quick replies
 
 ```json
-{"type": "message.send", "id": "cmd_4", "data": {"conversation": "conv_bot", "clientId": "c_1", "parts": [{"type": "text", "text": "¿Dónde está mi pedido?"}]}}
+{"type": "message.send", "id": "cmd_4", "data": {"conversation": "conv_bot", "clientId": "c_1", "parts": [{"type": "text", "text": "Where is my order?"}]}}
 {"type": "ack", "ref": "cmd_4", "seq": 10, "data": {}}
-{"type": "message.created", "seq": 11, "data": {"id": "m_1", "clientId": "c_1", "conversation": "conv_bot", "author": "p_me", "parts": [{"type": "text", "text": "¿Dónde está mi pedido?"}], "status": "sent", "createdAt": "2026-10-20T10:00:00Z"}}
+{"type": "message.created", "seq": 11, "data": {"id": "m_1", "clientId": "c_1", "conversation": "conv_bot", "author": "p_me", "parts": [{"type": "text", "text": "Where is my order?"}], "status": "sent", "createdAt": "2026-10-20T10:00:00Z"}}
 {"type": "message.created", "seq": 12, "data": {"id": "m_2", "conversation": "conv_bot", "author": "p_bot", "parts": [], "streaming": true, "createdAt": "2026-10-20T10:00:01Z"}}
-{"type": "message.delta", "seq": 13, "data": {"id": "m_2", "conversation": "conv_bot", "part": 0, "text": "Tu pedido A-1029 "}}
-{"type": "message.delta", "seq": 14, "data": {"id": "m_2", "conversation": "conv_bot", "part": 0, "text": "sale hoy."}}
+{"type": "message.delta", "seq": 13, "data": {"id": "m_2", "conversation": "conv_bot", "part": 0, "text": "Your order A-1029 "}}
+{"type": "message.delta", "seq": 14, "data": {"id": "m_2", "conversation": "conv_bot", "part": 0, "text": "ships today."}}
 {"type": "message.updated", "seq": 15, "data": {"id": "m_2", "conversation": "conv_bot", "streaming": false, "parts": [
-  {"type": "text", "text": "Tu pedido A-1029 sale hoy."},
-  {"type": "buttons", "buttons": [{"id": "track", "label": "Seguirlo"}, {"id": "human", "label": "Hablar con alguien"}], "fallback": "Responde: Seguirlo / Hablar con alguien"}
+  {"type": "text", "text": "Your order A-1029 ships today."},
+  {"type": "buttons", "buttons": [{"id": "track", "label": "Track it"}, {"id": "human", "label": "Talk to someone"}], "fallback": "Reply: Track it / Talk to someone"}
 ]}}
 {"type": "action", "id": "cmd_5", "data": {"conversation": "conv_bot", "message": "m_2", "button": "human"}}
 ```
@@ -625,10 +635,10 @@ Guidelines:
 {"type": "conversation.updated", "seq": 90, "data": {"id": "conv_wa", "capabilities": {"receipts": true, "composer": {
   "mode": "templates",
   "reason": "More than 24 hours since the customer's last message.",
-  "templates": [{"id": "followup_es", "name": "Seguimiento", "preview": "Hola {{1}}, ¿podemos ayudarte en algo más?", "params": ["name"]}]
+  "templates": [{"id": "followup_en", "name": "Follow-up", "preview": "Hi {{1}}, can we help with anything else?", "params": ["name"]}]
 }}}}
 {"type": "message.send", "id": "cmd_9", "data": {"conversation": "conv_wa", "clientId": "c_7", "parts": [
-  {"type": "template", "template": "followup_es", "params": {"name": "Ana"}, "fallback": "Hola Ana, ¿podemos ayudarte en algo más?"}
+  {"type": "template", "template": "followup_en", "params": {"name": "Anna"}, "fallback": "Hi Anna, can we help with anything else?"}
 ]}}
 ```
 
@@ -639,21 +649,21 @@ conversation's `composer.templates`.
 
 ```json
 {"type": "message.created", "seq": 300, "data": {"id": "m_9", "conversation": "conv_team", "author": "p_5", "createdAt": "2026-10-20T12:00:00Z", "parts": [
-  {"type": "text", "text": "Este pedido está retrasado:"},
-  {"type": "acme.order", "fallback": "Pedido A-1029 · 2 artículos · 59,90 €", "ext": {"acme": {"orderId": "A-1029", "total": "59.90", "currency": "EUR"}}}
+  {"type": "text", "text": "This order is late:"},
+  {"type": "acme.order", "fallback": "Order A-1029 · 2 items · €59.90", "ext": {"acme": {"orderId": "A-1029", "total": "59.90", "currency": "EUR"}}}
 ]}}
 ```
 
 A client that registered `acme.order` renders the order card; any other
-shows "Pedido A-1029 · 2 artículos · 59,90 €".
+shows "Order A-1029 · 2 items · €59.90".
 
 ### 13.4 A "contact us" widget, before anyone answers
 
 ```json
 {"type": "conversation.created", "seq": 1, "data": {"id": "conv_v1", "channel": "web", "state": "pending",
-  "participants": [{"id": "p_v", "kind": "user", "name": "Visitante"}],
+  "participants": [{"id": "p_v", "kind": "user", "name": "Visitor"}],
   "capabilities": {"attachments": {"types": ["image", "file"], "maxSize": 5242880}, "typing": true, "composer": {"mode": "free"}}}}
 {"type": "message.created", "seq": 2, "data": {"id": "m_s1", "conversation": "conv_v1", "createdAt": "2026-10-20T09:00:00Z", "parts": [
-  {"type": "system", "code": "queued", "text": "Te respondemos en unos minutos."}
+  {"type": "system", "code": "queued", "text": "We'll answer in a few minutes."}
 ]}}
 ```

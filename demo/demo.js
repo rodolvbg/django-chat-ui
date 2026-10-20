@@ -14,14 +14,14 @@ import {
 } from "../src/django_chat_ui/static/django_chat_ui/transports/memory.js";
 
 const me = { id: "p_me", kind: "agent", name: "Rodolfo" };
-const bot = { id: "p_bot", kind: "bot", name: "Asistente" };
+const bot = { id: "p_bot", kind: "bot", name: "Assistant" };
 const ana = {
     id: "p_ana",
     kind: "contact",
-    name: "Ana García",
-    handle: "+34 600 000 000",
+    name: "Anna Smith",
+    handle: "+1 555 0100",
 };
-const lucia = { id: "p_lucia", kind: "user", name: "Lucía Martín" };
+const lucy = { id: "p_lucy", kind: "user", name: "Lucy Martin" };
 const minutesAgo = (n) => new Date(Date.now() - n * 60000).toISOString();
 
 const server = new FakeServer({ me });
@@ -33,7 +33,7 @@ server.addConversation(
         capabilities: {
             streaming: true,
             buttons: true,
-            composer: { mode: "free", placeholder: "Pregunta algo…" },
+            composer: { mode: "free", placeholder: "Ask anything…" },
         },
     },
     [
@@ -46,15 +46,15 @@ server.addConversation(
                 {
                     type: "text",
                     format: "markdown",
-                    text: "¡Hola! Soy el **asistente**. ¿En qué te ayudo?",
+                    text: "Hi! I'm the **assistant**. How can I help?",
                 },
                 {
                     type: "buttons",
                     buttons: [
-                        { id: "order", label: "Mi pedido" },
-                        { id: "human", label: "Hablar con alguien" },
+                        { id: "order", label: "My order" },
+                        { id: "human", label: "Talk to someone" },
                     ],
-                    fallback: "Mi pedido / Hablar con alguien",
+                    fallback: "My order / Talk to someone",
                 },
             ],
         },
@@ -78,7 +78,7 @@ server.addConversation(
             conversation: "conv_wa",
             author: "p_ana",
             createdAt: minutesAgo(30),
-            parts: [{ type: "text", text: "Hola, ¿tenéis la talla M?" }],
+            parts: [{ type: "text", text: "Hi, do you have it in M?" }],
         },
         {
             id: "w2",
@@ -86,7 +86,7 @@ server.addConversation(
             author: "p_me",
             createdAt: minutesAgo(28),
             status: "read",
-            parts: [{ type: "text", text: "¡Sí! Te paso la foto." }],
+            parts: [{ type: "text", text: "Yes! Here's a photo." }],
         },
         {
             id: "w3",
@@ -98,7 +98,7 @@ server.addConversation(
                 {
                     type: "image",
                     url: "shirt.svg",
-                    alt: "Camiseta azul, talla M",
+                    alt: "Blue T-shirt, size M",
                     width: 240,
                     height: 150,
                 },
@@ -109,7 +109,7 @@ server.addConversation(
             conversation: "conv_wa",
             author: "p_ana",
             createdAt: minutesAgo(27),
-            parts: [{ type: "text", text: "Perfecto, gracias 🙌" }],
+            parts: [{ type: "text", text: "Perfect, thanks 🙌" }],
         },
     ],
 );
@@ -118,8 +118,8 @@ server.addConversation(
     {
         id: "conv_team",
         channel: "internal",
-        title: "Equipo de soporte",
-        participants: [me, lucia],
+        title: "Support team",
+        participants: [me, lucy],
         unread: 1,
         capabilities: {
             receipts: true,
@@ -131,12 +131,12 @@ server.addConversation(
         {
             id: "t1",
             conversation: "conv_team",
-            author: "p_lucia",
+            author: "p_lucy",
             createdAt: minutesAgo(12),
             parts: [
                 {
                     type: "text",
-                    text: "¿Puedes mirar el pedido A-1029? El cliente pregunta por el envío.",
+                    text: "Can you look at order A-1029? The customer asks about the delivery.",
                 },
             ],
         },
@@ -144,8 +144,8 @@ server.addConversation(
 );
 
 const answers = {
-    order: ["Tu pedido ", "**A-1029** ", "sale hoy ", "con MRW."],
-    human: ["Te paso ", "con una persona ", "en un momento."],
+    order: ["Your order ", "**A-1029** ", "ships today ", "with UPS."],
+    human: ["Putting you through ", "to someone ", "in a moment."],
 };
 
 async function botSays(chunks, buttons) {
@@ -179,13 +179,13 @@ server.onAction = (data) => {
         [{ type: "text", text: button?.label ?? data.button }],
         { status: "sent" },
     );
-    botSays(answers[data.button] ?? ["Vale."]);
+    botSays(answers[data.button] ?? ["OK."]);
 };
 server.onMessage = (message) => {
     if (message.conversation === "conv_bot") {
         botSays(
-            ["Déjame ", "mirarlo… ", "¿Es sobre un pedido?"],
-            [{ id: "order", label: "Sí, un pedido" }],
+            ["Let me ", "check… ", "Is it about an order?"],
+            [{ id: "order", label: "Yes, an order" }],
         );
     } else if (message.conversation === "conv_wa") {
         // WhatsApp: delivered, then read, then the window closes.
@@ -217,27 +217,27 @@ await client.connect();
 
 // The site's visitor, on its own server: the widget starts a conversation
 // that the assistant greets.
-const visitor = { id: "p_visitor", kind: "user", name: "Tú" };
+const visitor = { id: "p_visitor", kind: "user", name: "You" };
 const site = new FakeServer({ me: visitor });
 site.newConversation = {
     participants: [visitor, bot],
     capabilities: {
         streaming: true,
         buttons: true,
-        composer: { mode: "free", placeholder: "Escribe tu duda…" },
+        composer: { mode: "free", placeholder: "Ask us anything…" },
     },
 };
 site.onStart = (conversation) => {
     setTimeout(() => {
         site.post(conversation.id, bot.id, [
-            { type: "text", text: "¡Hola! ¿En qué podemos ayudarte?" },
+            { type: "text", text: "Hi! How can we help?" },
             {
                 type: "buttons",
                 buttons: [
-                    { id: "order", label: "Mi pedido" },
-                    { id: "human", label: "Hablar con alguien" },
+                    { id: "order", label: "My order" },
+                    { id: "human", label: "Talk to someone" },
                 ],
-                fallback: "Mi pedido / Hablar con alguien",
+                fallback: "My order / Talk to someone",
             },
         ]);
     }, 300);
@@ -255,18 +255,18 @@ site.onAction = (data) => {
         [{ type: "text", text: button?.label ?? data.button }],
         { status: "sent" },
     );
-    site.stream(data.conversation, bot.id, answers[data.button] ?? ["Vale."], {
+    site.stream(data.conversation, bot.id, answers[data.button] ?? ["OK."], {
         parts: [
             {
                 type: "text",
                 format: "markdown",
-                text: (answers[data.button] ?? ["Vale."]).join(""),
+                text: (answers[data.button] ?? ["OK."]).join(""),
             },
         ],
     });
 };
 site.onMessage = (message) => {
-    const chunks = ["Gracias, ", "una persona ", "te contesta enseguida."];
+    const chunks = ["Thanks, ", "someone will ", "answer you shortly."];
     site.stream(message.conversation, bot.id, chunks, {
         parts: [{ type: "text", text: chunks.join("") }],
     });
@@ -289,14 +289,14 @@ window.demo = {
                 receipts: true,
                 composer: {
                     mode: "templates",
-                    reason: "Han pasado más de 24 horas desde el último mensaje de Ana: solo plantillas.",
+                    reason: "More than 24 hours since Anna's last message: templates only.",
                     templates: [
                         {
                             id: "followup",
-                            name: "Seguimiento",
+                            name: "Follow-up",
                             preview:
-                                "Hola {{1}}, ¿podemos ayudarte en algo más?",
-                            params: ["nombre"],
+                                "Hi {{1}}, can we help with anything else?",
+                            params: ["name"],
                         },
                     ],
                 },

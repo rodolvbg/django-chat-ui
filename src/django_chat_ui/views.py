@@ -69,7 +69,9 @@ def events(request: HttpRequest) -> HttpResponse | StreamingHttpResponse:
     after = seq(request.GET.get("after"))
     if after is None:
         after = seq(request.headers.get("Last-Event-ID"))
-    reader = stream.Reader(backend, participant, after)
+    reader = stream.Reader(
+        backend, participant, after, commands.client_capabilities(request)
+    )
 
     if "text/event-stream" not in request.headers.get("Accept", ""):
         frames = reader.read() if after is not None else []

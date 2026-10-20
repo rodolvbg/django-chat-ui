@@ -206,6 +206,52 @@ describe("<chat-inbox>", () => {
         expect(element.client).toBe(client);
         element.remove();
     });
+
+    it("names how the channel knows the contact, not a bot", async () => {
+        const bot = { id: "p_b", kind: "bot", name: "Bot", handle: "shop-bot" };
+        const agent = {
+            id: "p_l",
+            kind: "agent",
+            name: "Luis",
+            handle: "ext. 12",
+        };
+        const contact = {
+            id: "p_v",
+            kind: "contact",
+            name: "Visitante",
+            handle: "v@x.es",
+        };
+        const { client } = await setup({
+            conversations: [
+                [
+                    {
+                        id: "c_web",
+                        channel: "web",
+                        participants: [ME, bot, agent, contact],
+                    },
+                    [],
+                ],
+                [
+                    {
+                        id: "c_team",
+                        channel: "internal",
+                        participants: [ME, bot, agent],
+                    },
+                    [],
+                ],
+            ],
+        });
+        const element = document.createElement("chat-inbox");
+        document.body.append(element);
+        element.client = client;
+        const subtitle = () =>
+            element.querySelector(".chat-inbox-subtitle").textContent;
+
+        element.selected = "c_web";
+        expect(subtitle()).toBe("web · v@x.es");
+        element.selected = "c_team";
+        expect(subtitle()).toBe("internal · ext. 12");
+    });
 });
 
 describe("preview", () => {

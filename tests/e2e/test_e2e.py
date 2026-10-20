@@ -1,5 +1,5 @@
 """A visitor and an agent chatting, in real Chromium windows, against a
-real Django server: the widget, the inbox, the stream, in Spanish."""
+real Django server: the widget, the inbox, the stream."""
 
 import re
 
@@ -27,7 +27,7 @@ def agent_page(live_server, browser: Browser) -> Page:
     User.objects.create_user(
         "agent", password="pw", first_name="Rodolfo", is_staff=True
     )
-    page = browser.new_context(locale="es-ES").new_page()
+    page = browser.new_context(locale="en-US").new_page()
     page.goto(f"{live_server.url}/admin/login/?next=/inbox/")
     page.fill("#id_username", "agent")
     page.fill("#id_password", "pw")
@@ -38,7 +38,7 @@ def agent_page(live_server, browser: Browser) -> Page:
 
 @pytest.fixture
 def visitor_page(live_server, browser: Browser) -> Page:
-    page = browser.new_context(locale="es-ES").new_page()
+    page = browser.new_context(locale="en-US").new_page()
     page.goto(f"{live_server.url}/")
     return page
 
@@ -51,53 +51,58 @@ def test_a_visitor_and_an_agent(agent_page: Page, visitor_page: Page):
 
     # The visitor opens the widget: the assistant greets them.
     launcher = visitor.locator(".chat-widget-launcher")
-    expect(launcher).to_have_attribute("aria-label", "Escríbenos")
+    expect(launcher).to_have_attribute("aria-label", "Chat with us")
     launcher.click()
     widget = visitor.locator("chat-widget chat-thread")
-    expect(widget.locator(".chat-message")).to_contain_text(["¡Hola! Soy el asistente"])
-
-    # A quick reply: their answer, and the assistant's, streamed.
-    widget.get_by_role("button", name="Mi pedido").click()
-    expect(widget.locator(".chat-message").last).to_contain_text(
-        "Tu pedido A-1029 sale hoy con MRW."
+    expect(widget.locator(".chat-message")).to_contain_text(
+        ["Hi! I'm the shop's assistant"]
     )
 
-    widget.locator(".chat-input").fill("¿Tenéis la talla M en azul?")
+    # A quick reply: their answer, and the assistant's, streamed.
+    widget.get_by_role("button", name="My order").click()
+    expect(widget.locator(".chat-message").last).to_contain_text(
+        "Your order A-1029 ships today with UPS."
+    )
+
+    widget.locator(".chat-input").fill("Do you have the blue one in M?")
     widget.locator(".chat-input").press("Enter")
     expect(widget.locator(".chat-message").last).to_contain_text(
-        "Una persona del equipo te contesta"
+        "Someone will answer you"
     )
 
     # The agent's inbox got it, unread.
     item = agent.locator(".chat-conversation").first
     expect(item.locator(".chat-conversation-preview")).to_contain_text(
-        "Una persona del equipo"
+        "Someone will answer you"
     )
     expect(item.locator(".chat-unread")).to_be_visible()
     item.click()
     thread = agent.locator("chat-inbox chat-thread")
     expect(thread.locator(".chat-message")).to_contain_text(
-        ["¿Tenéis la talla M en azul?"]
+        ["Do you have the blue one in M?"]
     )
     expect(item.locator(".chat-unread")).to_have_count(0)
 
     # They answer: the visitor sees it, and who joined.
-    thread.locator(".chat-input").fill("¡Sí! Te la reservo.")
-    thread.get_by_role("button", name="Enviar").click()
+    thread.locator(".chat-input").fill("Yes! I'll put one aside.")
+    thread.get_by_role("button", name="Send").click()
+    # Who joined, then their message: for them too, whatever their clock.
+    expect(thread.locator(".chat-message").nth(-2)).to_contain_text("Rodolfo joined")
+    expect(thread.locator(".chat-message").last).to_contain_text(
+        "Yes! I'll put one aside."
+    )
     expect(
-        widget.locator(".chat-message", has_text="¡Sí! Te la reservo.")
+        widget.locator(".chat-message", has_text="Yes! I'll put one aside.")
     ).to_be_visible()
-    expect(
-        widget.locator(".chat-message", has_text="Rodolfo se ha unido")
-    ).to_be_visible()
+    expect(widget.locator(".chat-message", has_text="Rodolfo joined")).to_be_visible()
 
     # The visitor's message shows as read by then.
-    asked = widget.locator(".chat-message", has_text="¿Tenéis la talla M en azul?")
+    asked = widget.locator(".chat-message", has_text="Do you have the blue one in M?")
     expect(asked.locator(".chat-status--read")).to_be_visible()
 
     # The agent sees the visitor typing.
-    widget.locator(".chat-input").press_sequentially("Gra")
-    expect(thread.locator(".chat-typing")).to_have_text(re.compile("está escribiendo"))
+    widget.locator(".chat-input").press_sequentially("Tha")
+    expect(thread.locator(".chat-typing")).to_have_text(re.compile("is typing"))
     assert errors == []
 
 
@@ -107,7 +112,7 @@ def test_a_photo(agent_page: Page, visitor_page: Page, tmp_path):
     widget = visitor.locator("chat-widget chat-thread")
     expect(widget.locator(".chat-message")).to_have_count(1)
 
-    photo = tmp_path / "talla.png"
+    photo = tmp_path / "size.png"
     photo.write_bytes(
         bytes.fromhex(
             "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
@@ -117,10 +122,28 @@ def test_a_photo(agent_page: Page, visitor_page: Page, tmp_path):
     )
     widget.locator(".chat-file-input").set_input_files(str(photo))
     image = widget.locator(".chat-image")
-    expect(image).to_have_attribute("alt", "talla.png")
+    expect(image).to_have_attribute("alt", "size.png")
     expect(image).to_have_js_property("naturalWidth", 1)
 
     agent_page.locator(".chat-conversation").first.click()
     expect(agent_page.locator("chat-inbox .chat-image")).to_have_js_property(
         "naturalWidth", 1
+    )
+
+
+def test_in_spanish(live_server, browser: Browser):
+    """The interface in the browser's language (the conversation as written)."""
+    page = browser.new_context(locale="es-ES").new_page()
+    page.goto(f"{live_server.url}/")
+    launcher = page.locator(".chat-widget-launcher")
+    expect(launcher).to_have_attribute("aria-label", "Escríbenos")
+    launcher.click()
+    widget = page.locator("chat-widget chat-thread")
+    expect(widget.locator(".chat-message")).to_have_count(1)
+    expect(widget.locator(".chat-input")).to_have_attribute(
+        "placeholder", "Escribe un mensaje…"
+    )
+    expect(widget.get_by_role("button", name="Enviar")).to_be_visible()
+    expect(page.locator(".chat-widget-close")).to_have_attribute(
+        "aria-label", "Cerrar el chat"
     )

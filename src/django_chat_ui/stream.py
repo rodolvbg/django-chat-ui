@@ -15,6 +15,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Max, Q
 from django.utils import timezone
 
+from . import protocol
 from .models import Event
 
 if TYPE_CHECKING:
@@ -41,10 +42,16 @@ class Reader:
     ``after`` (a ``seq``; None: from now on)."""
 
     def __init__(
-        self, backend: ChatBackend, participant: Participant, after: int | None
+        self,
+        backend: ChatBackend,
+        participant: Participant,
+        after: int | None,
+        capabilities: dict[str, Any] | None = None,
     ):
         self.backend = backend
         self.participant = participant
+        #: The client's, from its hello: what it's sent is degraded for it.
+        self.capabilities = capabilities
         if after is None:
             after = Event.objects.aggregate(last=Max("id"))["last"] or 0
         self.after = after
@@ -74,7 +81,8 @@ class Reader:
             visible, id__gt=self.after, id__lte=horizon
         ).order_by("id")
         self.after = horizon
-        return [event.frame() for event in events]
+        frames = (protocol.degrade(e.frame(), self.capabilities) for e in events)
+        return [frame for frame in frames if frame is not None]
 
 
 def message(frame: dict[str, Any]) -> str:

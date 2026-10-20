@@ -1,6 +1,6 @@
 """Fill the example with conversations: a WhatsApp chat with a customer,
 and an internal one of the team. Creates the staff users ``admin`` and
-``lucia`` (password: ``demo``) if they don't exist."""
+``lucy`` (password: ``demo``) if they don't exist."""
 
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
@@ -15,7 +15,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         users = {}
-        for username, name in [("admin", "Rodolfo"), ("lucia", "Lucía Martín")]:
+        for username, name in [("admin", "Rodolfo"), ("lucy", "Lucy Martin")]:
             user = User.objects.filter(username=username).first()
             if user is None:
                 user = User.objects.create_superuser(
@@ -24,13 +24,13 @@ class Command(BaseCommand):
             users[username] = user
         backend = get_backend()
         me = backend.participant_for_user(users["admin"])
-        lucia = backend.participant_for_user(users["lucia"])
-        ana = Participant.objects.create(
-            kind="contact", name="Ana García", handle="+34 600 000 000"
+        lucy = backend.participant_for_user(users["lucy"])
+        anna = Participant.objects.create(
+            kind="contact", name="Anna Smith", handle="+1 555 0100"
         )
 
         whatsapp = services.create_conversation(
-            [me, ana],
+            [me, anna],
             channel="whatsapp",
             capabilities={
                 "receipts": True,
@@ -41,26 +41,28 @@ class Command(BaseCommand):
         )
         services.post(
             whatsapp,
-            ana,
-            [{"type": "text", "text": "Hola, ¿tenéis la talla M en azul?"}],
+            anna,
+            [{"type": "text", "text": "Hi, do you have the blue one in M?"}],
         )
-        services.post(whatsapp, me, [{"type": "text", "text": "¡Sí! Te la reservo."}])
-        services.post(whatsapp, ana, [{"type": "text", "text": "Perfecto, gracias 🙌"}])
+        services.post(
+            whatsapp, me, [{"type": "text", "text": "Yes! I'll put one aside."}]
+        )
+        services.post(whatsapp, anna, [{"type": "text", "text": "Perfect, thanks 🙌"}])
 
         team = services.create_conversation(
-            [me, lucia],
+            [me, lucy],
             channel="internal",
-            title="Equipo de soporte",
+            title="Support team",
             capabilities={"receipts": True, "typing": True, "history": True},
         )
         services.post(
             team,
-            lucia,
+            lucy,
             [
                 {
                     "type": "text",
-                    "text": "¿Puedes mirar el pedido A-1029? "
-                    "El cliente pregunta por el envío.",
+                    "text": "Can you look at order A-1029? "
+                    "The customer asks about the delivery.",
                 }
             ],
         )

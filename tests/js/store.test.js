@@ -118,6 +118,21 @@ describe("ConversationStore", () => {
         expect(store.messages[0].error).toBeUndefined();
     });
 
+    it("puts the server's copy at the server's time", () => {
+        // Sent at 10:05 by the client's clock; the server, before adding
+        // it at 10:07, added "Rodolfo joined" at 10:06 (and that came first).
+        const store = new ConversationStore("c1");
+        store.addPending(message("c_1", 5, { clientId: "c_1" }));
+        store.apply({ type: "message.created", data: message("joined", 6) });
+        expect(store.messages.map((m) => m.id)).toEqual(["c_1", "joined"]);
+
+        store.apply({
+            type: "message.created",
+            data: message("m_9", 7, { clientId: "c_1" }),
+        });
+        expect(store.messages.map((m) => m.id)).toEqual(["joined", "m_9"]);
+    });
+
     it("updates messages, and streams text into them", () => {
         const store = new ConversationStore("c1");
         store.apply({

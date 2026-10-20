@@ -93,6 +93,32 @@ describe("boot.js", () => {
         expect(fetch.mock.calls[0][0]).toBe("/e");
     });
 
+    it("speaks over a WebSocket when told", async () => {
+        const sockets = [];
+        vi.stubGlobal(
+            "WebSocket",
+            class {
+                constructor(url) {
+                    sockets.push(url);
+                }
+                close() {}
+            },
+        );
+        page("", {
+            events: "/e",
+            commands: "/c",
+            uploads: "/u",
+            websocket: "/chat/ws",
+            transport: "websocket",
+            texts: {},
+        });
+        const { client } = await import(
+            "../../src/django_chat_ui/static/django_chat_ui/boot.js"
+        );
+        expect(client.transport.constructor.name).toBe("WebSocketTransport");
+        expect(sockets).toEqual([`ws://${location.host}/chat/ws`]);
+    });
+
     it("does nothing without its configuration", async () => {
         page("<chat-thread></chat-thread>");
         const { client, attach } = await import(

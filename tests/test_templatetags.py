@@ -45,6 +45,9 @@ def test_chat_ui_polling_and_without_a_request():
     assert data["poll"] == 5000
     assert data["csrfToken"] == ""
     assert config(render('{% chat_ui transport="x" %}'))["transport"] == "sse"
+    data = config(render('{% chat_ui transport="websocket" %}'))
+    assert data["transport"] == "websocket"
+    assert data["websocket"] == "/chat/ws"
 
 
 def test_chat_ui_texts_are_translated():
