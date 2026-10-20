@@ -5,7 +5,7 @@ import re
 
 import pytest
 from django.contrib.auth.models import User
-from playwright.sync_api import Browser, Page, expect
+from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -23,11 +23,11 @@ def demo(settings):
 
 
 @pytest.fixture
-def agent_page(live_server, browser: Browser) -> Page:
+def agent_page(live_server, new_page) -> Page:
     User.objects.create_user(
         "agent", password="pw", first_name="Rodolfo", is_staff=True
     )
-    page = browser.new_context(locale="en-US").new_page()
+    page = new_page(locale="en-US")
     page.goto(f"{live_server.url}/admin/login/?next=/inbox/")
     page.fill("#id_username", "agent")
     page.fill("#id_password", "pw")
@@ -37,8 +37,8 @@ def agent_page(live_server, browser: Browser) -> Page:
 
 
 @pytest.fixture
-def visitor_page(live_server, browser: Browser) -> Page:
-    page = browser.new_context(locale="en-US").new_page()
+def visitor_page(live_server, new_page) -> Page:
+    page = new_page(locale="en-US")
     page.goto(f"{live_server.url}/")
     return page
 
@@ -131,9 +131,9 @@ def test_a_photo(agent_page: Page, visitor_page: Page, tmp_path):
     )
 
 
-def test_in_spanish(live_server, browser: Browser):
+def test_in_spanish(live_server, new_page):
     """The interface in the browser's language (the conversation as written)."""
-    page = browser.new_context(locale="es-ES").new_page()
+    page = new_page(locale="es-ES")
     page.goto(f"{live_server.url}/")
     launcher = page.locator(".chat-widget-launcher")
     expect(launcher).to_have_attribute("aria-label", "Escríbenos")
@@ -171,3 +171,28 @@ def test_reactions(agent_page: Page, visitor_page: Page):
     reaction.click()
     expect(asked.locator(".chat-reaction")).to_have_text("👍2")
     expect(asked.locator(".chat-reaction")).to_have_attribute("aria-pressed", "true")
+
+
+def test_a_visitor_quicker_than_the_network(live_server, new_page):
+    """The widget opened before the chat has connected (a slow network): it
+    waits for the session, and the visitor stays one visitor."""
+    page = new_page(locale="en-US")
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Network.enable")
+    cdp.send(
+        "Network.emulateNetworkConditions",
+        {
+            "offline": False,
+            "latency": 500,
+            "downloadThroughput": -1,
+            "uploadThroughput": -1,
+        },
+    )
+    page.goto(f"{live_server.url}/", wait_until="commit")
+    page.locator(".chat-widget-launcher").click()
+    widget = page.locator("chat-widget chat-thread")
+    expect(widget.locator(".chat-message")).to_have_count(1, timeout=15000)
+    widget.get_by_role("button", name="Sizes").click()
+    expect(widget.locator(".chat-message").last).to_contain_text(
+        "take your usual one", timeout=15000
+    )

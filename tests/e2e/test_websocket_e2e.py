@@ -7,7 +7,7 @@ import time
 
 import pytest
 from django.contrib.auth.models import User
-from playwright.sync_api import Browser, expect
+from playwright.sync_api import expect
 
 pytest.importorskip("channels")
 uvicorn = pytest.importorskip("uvicorn")
@@ -52,14 +52,14 @@ def asgi_url(settings):
     thread.join(5)
 
 
-def test_chatting_over_a_websocket(asgi_url, browser: Browser):
+def test_chatting_over_a_websocket(asgi_url, new_page):
     User.objects.create_user(
         "agent", password="pw", first_name="Rodolfo", is_staff=True
     )
     errors = []
     sockets = []
 
-    visitor = browser.new_context(locale="en-US").new_page()
+    visitor = new_page(locale="en-US")
     visitor.on("pageerror", lambda error: errors.append(str(error)))
     visitor.on("websocket", lambda ws: sockets.append(ws.url))
     visitor.goto(f"{asgi_url}/?transport=websocket")
@@ -72,7 +72,7 @@ def test_chatting_over_a_websocket(asgi_url, browser: Browser):
     widget.locator(".chat-input").press("Enter")
     expect(widget.locator(".chat-message").last).to_contain_text("answer you shortly")
 
-    agent = browser.new_context(locale="en-US").new_page()
+    agent = new_page(locale="en-US")
     agent.on("pageerror", lambda error: errors.append(str(error)))
     agent.goto(f"{asgi_url}/admin/login/?next=/inbox/%3Ftransport%3Dwebsocket")
     agent.fill("#id_username", "agent")

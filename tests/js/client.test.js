@@ -199,6 +199,54 @@ describe("ChatClient", () => {
         ).toEqual(["one", "two"]);
     });
 
+    it("holds commands sent while connecting until after the hello", async () => {
+        // Sent before the hello, a command would go without the session the
+        // hello settles: it could be someone else's (a new visitor).
+        let open;
+        const sent = [];
+        const transport = {
+            onFrame: null,
+            connect(onFrame) {
+                this.onFrame = onFrame;
+                return new Promise((resolve) => {
+                    open = resolve;
+                });
+            },
+            async send(frame) {
+                sent.push(frame.type);
+                const data =
+                    frame.type === "hello" ? { me: ME, protocol: "1.0" } : {};
+                this.onFrame({
+                    type: frame.type === "hello" ? "ready" : "ack",
+                    ref: frame.id,
+                    data,
+                });
+            },
+            close() {},
+        };
+        const client = new ChatClient(transport);
+        const connecting = client.connect();
+        const started = client.command("conversation.open", { with: [] });
+        await flush();
+        expect(sent).toEqual([]); // the stream isn't open yet: nothing goes
+
+        open();
+        await connecting;
+        await started;
+        expect(sent).toEqual(["hello", "conversation.open"]);
+
+        // A failed connection doesn't hold them forever.
+        const failing = new ChatClient({
+            connect: () => Promise.reject(new Error("offline")),
+            send: () => Promise.reject(new Error("offline")),
+            close() {},
+        });
+        await expect(failing.connect()).rejects.toThrow("offline");
+        await expect(failing.command("typing", {})).rejects.toMatchObject({
+            code: "transport",
+        });
+    });
+
     it("ignores an answer to nothing", async () => {
         const { client } = await setup();
         expect(() =>

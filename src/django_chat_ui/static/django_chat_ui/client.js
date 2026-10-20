@@ -40,10 +40,19 @@ export class ChatClient extends EventTarget {
         this.stores = new Map();
         this.pending = new Map();
         this.seq = null;
+        this.connecting = null;
     }
 
-    /** Connect and say hello; resolves with the `ready` data. */
-    async connect() {
+    /** Connect and say hello; resolves with the `ready` data. Commands
+     * sent meanwhile wait for it: the session (who this client is) is
+     * settled by then — sent before, a command could be someone else's. */
+    connect() {
+        const connecting = this.hello();
+        this.connecting = connecting;
+        return connecting;
+    }
+
+    async hello() {
         const resume = this.seq === null ? undefined : { seq: this.seq };
         await this.transport.connect((frame) => this.receive(frame), {
             resume,
@@ -80,13 +89,20 @@ export class ChatClient extends EventTarget {
         const answer = new Promise((resolve, reject) => {
             this.pending.set(id, { resolve, reject, type });
         });
-        this.transport.send({ type, id, data }).catch((error) => {
-            this.settle(id, null, {
-                code: "transport",
-                message: String(error),
-                retry: true,
+        // After the hello (if one is under way): see connect().
+        const after =
+            type === "hello" || !this.connecting
+                ? Promise.resolve()
+                : this.connecting.catch(() => {});
+        after
+            .then(() => this.transport.send({ type, id, data }))
+            .catch((error) => {
+                this.settle(id, null, {
+                    code: "transport",
+                    message: String(error),
+                    retry: true,
+                });
             });
-        });
         return answer;
     }
 
