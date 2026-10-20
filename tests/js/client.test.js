@@ -122,7 +122,8 @@ describe("ChatClient", () => {
         const { server, client } = await setup({ conversations: [[BOT]] });
         server.post("conv_bot", "p_bot", [{ type: "text", text: "one" }]);
         await flush();
-        expect(client.seq).toBe(1);
+        // The message, and the conversation's update (its last message).
+        expect(client.seq).toBe(2);
 
         client.close();
         server.post("conv_bot", "p_bot", [{ type: "text", text: "two" }]);
@@ -130,7 +131,7 @@ describe("ChatClient", () => {
         await flush();
 
         expect(ready.resumed).toBe(true);
-        expect(server.received.at(-1).data.resume).toEqual({ seq: 1 });
+        expect(server.received.at(-1).data.resume).toEqual({ seq: 2 });
         expect(client.conversation("conv_bot").messages.map((m) => m.parts[0].text)).toEqual(["one", "two"]);
     });
 

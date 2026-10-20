@@ -1,15 +1,19 @@
 /**
- * Two conversations on one in-memory server: a chatbot that streams its
- * answers and offers quick replies, and a WhatsApp chat with receipts whose
- * 24-hour window closes. Same <chat-thread>, different capabilities.
+ * An agent's inbox on one in-memory server — a chatbot that streams its
+ * answers and offers quick replies, a WhatsApp chat with receipts whose
+ * 24-hour window closes, and an internal chat — and, on another, a site's
+ * visitor with the "contact us" widget. Same <chat-thread>, different
+ * capabilities.
  */
-import "../src/django_chat_ui/static/django_chat_ui/chat-thread.js";
+import "../src/django_chat_ui/static/django_chat_ui/chat-inbox.js";
+import "../src/django_chat_ui/static/django_chat_ui/chat-widget.js";
 import { ChatClient } from "../src/django_chat_ui/static/django_chat_ui/client.js";
 import { FakeServer, MemoryTransport } from "../src/django_chat_ui/static/django_chat_ui/transports/memory.js";
 
 const me = { id: "p_me", kind: "agent", name: "Rodolfo" };
 const bot = { id: "p_bot", kind: "bot", name: "Asistente" };
 const ana = { id: "p_ana", kind: "contact", name: "Ana García", handle: "+34 600 000 000" };
+const lucia = { id: "p_lucia", kind: "user", name: "Lucía Martín" };
 const minutesAgo = (n) => new Date(Date.now() - n * 60000).toISOString();
 
 const server = new FakeServer({ me });
@@ -42,6 +46,20 @@ server.addConversation(
     ],
 );
 
+server.addConversation(
+    {
+        id: "conv_team",
+        channel: "internal",
+        title: "Equipo de soporte",
+        participants: [me, lucia],
+        unread: 1,
+        capabilities: { receipts: true, typing: true, composer: { mode: "free" } },
+    },
+    [
+        { id: "t1", conversation: "conv_team", author: "p_lucia", createdAt: minutesAgo(12), parts: [{ type: "text", text: "¿Puedes mirar el pedido A-1029? El cliente pregunta por el envío." }] },
+    ],
+);
+
 const answers = {
     order: ["Tu pedido ", "**A-1029** ", "sale hoy ", "con MRW."],
     human: ["Te paso ", "con una persona ", "en un momento."],
@@ -66,7 +84,7 @@ server.onAction = (data) => {
 server.onMessage = (message) => {
     if (message.conversation === "conv_bot") {
         botSays(["Déjame ", "mirarlo… ", "¿Es sobre un pedido?"], [{ id: "order", label: "Sí, un pedido" }]);
-    } else {
+    } else if (message.conversation === "conv_wa") {
         // WhatsApp: delivered, then read, then the window closes.
         setTimeout(() => server.emit("message.updated", { id: message.id, conversation: "conv_wa", status: "delivered" }), 600);
         setTimeout(() => server.emit("message.updated", { id: message.id, conversation: "conv_wa", status: "read" }), 1400);
@@ -74,13 +92,50 @@ server.onMessage = (message) => {
 };
 
 const client = new ChatClient(new MemoryTransport(server));
-for (const thread of document.querySelectorAll("chat-thread")) thread.client = client;
+const inbox = document.querySelector("chat-inbox");
+inbox.client = client;
 await client.connect();
+
+// The site's visitor, on its own server: the widget starts a conversation
+// that the assistant greets.
+const visitor = { id: "p_visitor", kind: "user", name: "Tú" };
+const site = new FakeServer({ me: visitor });
+site.newConversation = {
+    participants: [visitor, bot],
+    capabilities: { streaming: true, buttons: true, composer: { mode: "free", placeholder: "Escribe tu duda…" } },
+};
+site.onStart = (conversation) => {
+    setTimeout(() => {
+        site.post(conversation.id, bot.id, [
+            { type: "text", text: "¡Hola! ¿En qué podemos ayudarte?" },
+            { type: "buttons", buttons: [{ id: "order", label: "Mi pedido" }, { id: "human", label: "Hablar con alguien" }], fallback: "Mi pedido / Hablar con alguien" },
+        ]);
+    }, 300);
+};
+site.onAction = (data) => {
+    const message = site.messages.get(data.conversation).find((m) => m.id === data.message);
+    const button = message.parts.flatMap((part) => part.buttons ?? []).find((b) => b.id === data.button);
+    site.post(data.conversation, visitor.id, [{ type: "text", text: button?.label ?? data.button }], { status: "sent" });
+    site.stream(data.conversation, bot.id, answers[data.button] ?? ["Vale."], {
+        parts: [{ type: "text", format: "markdown", text: (answers[data.button] ?? ["Vale."]).join("") }],
+    });
+};
+site.onMessage = (message) => {
+    const chunks = ["Gracias, ", "una persona ", "te contesta enseguida."];
+    site.stream(message.conversation, bot.id, chunks, { parts: [{ type: "text", text: chunks.join("") }] });
+};
+const visitorClient = new ChatClient(new MemoryTransport(site));
+const widget = document.querySelector("chat-widget");
+widget.client = visitorClient;
+await visitorClient.connect();
 
 // Demo controls, for screenshots and trying it out.
 window.demo = {
     server,
     client,
+    inbox,
+    widget,
+    site,
     closeWindow() {
         server.update("conv_wa", {
             capabilities: {

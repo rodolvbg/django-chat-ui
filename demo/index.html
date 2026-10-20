@@ -10,14 +10,15 @@
 </head>
 <body>
     <main class="demo">
-        <section>
-            <h2>Chatbot</h2>
-            <chat-thread conversation="conv_bot"></chat-thread>
+        <section class="demo-inbox">
+            <h2>Bandeja (agente)</h2>
+            <chat-inbox></chat-inbox>
         </section>
-        <section>
-            <h2>WhatsApp</h2>
-            <chat-thread conversation="conv_wa"></chat-thread>
+        <section class="demo-site">
+            <h2>Web (visitante)</h2>
+            <p>El botón de abajo a la derecha es <code>&lt;chat-widget&gt;</code>: abre una conversación nueva con el asistente.</p>
         </section>
     </main>
+    <chat-widget heading="Soporte" subheading="Te respondemos en minutos" channel="web"></chat-widget>
 </body>
 </html>

@@ -416,13 +416,13 @@ referring to it, besides any events it causes.
 | `type` | `data` | Needs |
 |---|---|---|
 | `hello` | `{ protocol, client, capabilities, resume? }` | Section 8. |
-| `conversation.open` | `{ conversation, limit? }` or `{ with, channel? }` | Subscribe to one, or start one with participants `with`. The server sends its `conversation.created` and a `history` event with its latest messages (section 9), whether or not the conversation has the `history` capability. |
+| `conversation.open` | `{ conversation, limit? }` or `{ with, channel? }` | Subscribe to one, or start one with participants `with`. The server sends its `conversation.created` and a `history` event with its latest messages (section 9), whether or not the conversation has the `history` capability. Its `ack` has `{ conversation }`: the id, which a client starting one doesn't know yet. |
 | `conversation.close` | `{ conversation }` | Unsubscribe. |
 | `message.send` | `{ conversation, clientId, parts, replyTo? }` | `composer.mode` allows it. **Idempotent by `clientId`**: resending the same `clientId` MUST NOT create a second message. |
 | `message.edit` | `{ id, parts }` | `edit` |
 | `message.delete` | `{ id }` | `delete` |
 | `message.react` | `{ id, emoji, active }` | `reactions` |
-| `message.read` | `{ conversation, until }` | |
+| `message.read` | `{ conversation, until }` | The server SHOULD answer with `conversation.updated` (`unread`). |
 | `typing` | `{ conversation, active }` | `typing` |
 | `action` | `{ conversation, message, button }` | `buttons`: a button or quick reply was used. The server answers with whatever it does (a bot's reply, for instance). |
 | `history.fetch` | `{ conversation, before?, limit? }` | `history` (to fetch older messages) |

@@ -132,11 +132,29 @@ export class ChatClient extends EventTarget {
         const id = frame.type.startsWith("conversation.")
             ? data.id
             : data.conversation;
+        let changed = false;
         if (frame.type === "conversation.created" && id) {
-            this.conversation(id).apply(frame);
+            changed = this.conversation(id).apply(frame);
         } else if (id && this.stores.has(id)) {
-            this.stores.get(id).apply(frame);
+            changed = this.stores.get(id).apply(frame);
         }
+        if (
+            changed &&
+            (frame.type.startsWith("conversation.") ||
+                frame.type === "message.created")
+        ) {
+            // The list of conversations changed (an inbox follows it).
+            this.dispatchEvent(new Event("conversations"));
+        }
+    }
+
+    /** The client's conversations, the latest active first. */
+    list() {
+        const updated = (store) =>
+            store.lastMessage?.createdAt ?? store.conversation.updatedAt ?? "";
+        return [...this.stores.values()]
+            .filter((store) => store.conversation.channel !== undefined)
+            .sort((a, b) => (updated(a) < updated(b) ? 1 : -1));
     }
 
     // Commands -------------------------------------------------------------
@@ -202,6 +220,16 @@ export class ChatClient extends EventTarget {
      * messages. */
     open(conversation, limit = 30) {
         return this.command("conversation.open", { conversation, limit });
+    }
+
+    /** Start a conversation with participants `with` (ids); resolves with
+     * its id. */
+    async start(participants = [], channel) {
+        const answer = await this.command("conversation.open", {
+            with: participants,
+            ...(channel ? { channel } : {}),
+        });
+        return answer.conversation;
     }
 
     /** Fetch older messages (section 9). */

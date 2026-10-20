@@ -37,6 +37,11 @@ export class ConversationStore extends EventTarget {
         this.before = null;
     }
 
+    /** The latest message: the last one loaded, or the conversation's. */
+    get lastMessage() {
+        return this.messages.at(-1) ?? this.conversation.lastMessage ?? null;
+    }
+
     get participants() {
         return new Map(
             (this.conversation.participants ?? []).map((participant) => [

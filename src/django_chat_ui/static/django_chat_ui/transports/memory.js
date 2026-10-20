@@ -60,6 +60,10 @@ export class FakeServer {
         this.onAction = null;
         /** Return an Error object to reject a message.send. */
         this.reject = null;
+        /** Fields of the conversations clients start (conversation.open
+         * with `with`), and a hook called with each. */
+        this.newConversation = {};
+        this.onStart = null;
     }
 
     attach(transport, resume) {
@@ -75,6 +79,9 @@ export class FakeServer {
         // Its own copies, as a real server's: updating them changes nothing
         // outside.
         const own = structuredClone(conversation);
+        // Its last message, for a list of conversations (as `ready` has it).
+        const last = messages.at(-1);
+        if (last && !own.lastMessage) own.lastMessage = structuredClone(last);
         this.conversations.set(own.id, own);
         this.messages.set(own.id, structuredClone(messages));
         return own;
@@ -122,6 +129,15 @@ export class FakeServer {
         };
         this.messages.get(conversation)?.push(message);
         this.emit("message.created", message);
+        const current = this.conversations.get(conversation);
+        if (current) {
+            const changes = { lastMessage: message, updatedAt: message.createdAt };
+            if (author !== this.me.id) {
+                changes.unread = (current.unread ?? 0) + 1;
+            }
+            Object.assign(current, changes);
+            this.emit("conversation.updated", { id: conversation, ...changes });
+        }
         return message;
     }
 
@@ -206,17 +222,35 @@ const COMMANDS = {
     },
     "message.read"(data, frame) {
         this.answer("ack", {}, frame.id);
+        const conversation = this.conversations.get(data.conversation);
+        if (conversation?.unread) {
+            conversation.unread = 0;
+            this.emit("conversation.updated", { id: data.conversation, unread: 0 });
+        }
     },
     typing(data, frame) {
         this.answer("ack", {}, frame.id);
     },
     "conversation.open"(data, frame) {
+        if (data.with) {
+            // A new conversation, as the "contact us" widget starts one.
+            const created = this.addConversation({
+                id: newId("conv"),
+                channel: data.channel ?? "web",
+                state: "pending",
+                participants: [this.me],
+                capabilities: { composer: { mode: "free" } },
+                ...this.newConversation,
+            });
+            data = { conversation: created.id, limit: data.limit };
+            this.onStart?.(created, this);
+        }
         const conversation = this.conversations.get(data.conversation);
         if (!conversation) {
             this.answer("error", { code: "not_found" }, frame.id);
             return;
         }
-        this.answer("ack", {}, frame.id);
+        this.answer("ack", { conversation: conversation.id }, frame.id);
         this.emit("conversation.created", conversation);
         // Its latest messages (protocol section 7.3).
         COMMANDS["history.fetch"].call(

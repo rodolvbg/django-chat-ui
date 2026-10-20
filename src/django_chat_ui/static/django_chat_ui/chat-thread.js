@@ -15,8 +15,9 @@
  * works under a strict Content Security Policy.
  */
 
-import { attachmentTypes, capability, composerMode } from "./protocol.js";
+import { element, format } from "./dom.js";
 import { renderPart } from "./parts.js";
+import { attachmentTypes, capability, composerMode } from "./protocol.js";
 
 export const TEXTS = {
     placeholder: "Write a message…",
@@ -41,17 +42,6 @@ export const TEXTS = {
 };
 
 const STATUS_MARKS = { sending: "🕓", sent: "✓", delivered: "✓✓", read: "✓✓" };
-
-function element(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined && text !== null) node.textContent = String(text);
-    return node;
-}
-
-function format(template, values) {
-    return template.replace(/%\((\w+)\)s/g, (_, key) => values[key] ?? "");
-}
 
 export class ChatThread extends HTMLElement {
     constructor() {

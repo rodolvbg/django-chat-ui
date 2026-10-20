@@ -6,7 +6,7 @@ body {
 
 .demo {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
     gap: 16px;
     padding: 16px;
 }
@@ -16,9 +16,19 @@ body {
     font-size: 1rem;
 }
 
-.demo chat-thread {
-    height: 560px;
+.demo chat-inbox {
+    height: 600px;
     border: 1px solid #d0d7de;
     border-radius: 12px;
     overflow: hidden;
+}
+
+.demo-site p {
+    color: #656d76;
+}
+
+@media (width < 760px) {
+    .demo {
+        grid-template-columns: 1fr;
+    }
 }
