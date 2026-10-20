@@ -1,0 +1,24 @@
+body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: #f6f8fa;
+}
+
+.demo {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    padding: 16px;
+}
+
+.demo h2 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+}
+
+.demo chat-thread {
+    height: 560px;
+    border: 1px solid #d0d7de;
+    border-radius: 12px;
+    overflow: hidden;
+}

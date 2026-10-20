@@ -1,0 +1,16 @@
+{
+    "name": "django-chat-ui",
+    "private": true,
+    "type": "module",
+    "description": "JS test tooling for django-chat-ui",
+    "scripts": {
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "coverage": "vitest run --coverage"
+    },
+    "devDependencies": {
+        "@vitest/coverage-v8": "^3.2.7",
+        "jsdom": "^26.1.0",
+        "vitest": "^3.2.7"
+    }
+}
