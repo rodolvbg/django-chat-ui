@@ -18,7 +18,12 @@
 
 import { element, format } from "./dom.js";
 import { renderPart } from "./parts.js";
-import { attachmentTypes, capability, composerMode } from "./protocol.js";
+import {
+    attachmentTypes,
+    capability,
+    composerMode,
+    reactionEmojis,
+} from "./protocol.js";
 
 export const TEXTS = {
     placeholder: "Write a message…",
@@ -40,6 +45,8 @@ export const TEXTS = {
     delivered: "Delivered",
     read: "Read",
     log: "Messages",
+    react: "React",
+    you: "You",
 };
 
 const STATUS_MARKS = { sending: "🕓", sent: "✓", delivered: "✓✓", read: "✓✓" };
@@ -53,6 +60,8 @@ export class ChatThread extends HTMLElement {
         this.uploader = null;
         this.onChange = () => this.render();
         this.typingTimer = null;
+        /** The message whose reaction picker is open. */
+        this.picking = null;
     }
 
     static get observedAttributes() {
@@ -200,7 +209,35 @@ export class ChatThread extends HTMLElement {
             );
             previous = message;
         }
+        const focused = this.focused();
         this.list.replaceChildren(...nodes);
+        this.refocus(focused);
+    }
+
+    /** What has the focus in the list, to find it again once redrawn. */
+    focused() {
+        const active = document.activeElement;
+        if (!active || active === this.list || !this.list.contains(active)) {
+            return null;
+        }
+        return {
+            message: active.closest("[data-id]")?.dataset.id,
+            className: active.classList[0],
+            emoji: active.dataset.emoji,
+        };
+    }
+
+    refocus(focused) {
+        if (!focused?.message || !focused.className) return;
+        const candidates = [
+            ...(this.messageNode(focused.message)?.getElementsByClassName(
+                focused.className,
+            ) ?? []),
+        ];
+        const same =
+            candidates.find((node) => node.dataset.emoji === focused.emoji) ??
+            candidates[0];
+        same?.focus();
     }
 
     isSystem(message, participants) {
@@ -243,8 +280,125 @@ export class ChatThread extends HTMLElement {
             bubble.append(rendered);
         }
         node.append(bubble);
-        if (!system) node.append(this.renderMeta(message, own, receipts));
+        if (!system) {
+            const reactions = this.renderReactions(message, me, participants);
+            if (reactions) node.append(reactions);
+            const meta = this.renderMeta(message, own, receipts);
+            if (this.reactable(message).length) {
+                meta.append(this.renderReactButton(message));
+            }
+            node.append(meta);
+        }
         return node;
+    }
+
+    /** Whether one can react to this message here, and with what. */
+    reactable(message) {
+        const emojis = reactionEmojis(this._store.conversation);
+        const can =
+            emojis.length > 0 &&
+            !message.deleted &&
+            !message.streaming &&
+            message.status !== "sending" &&
+            message.status !== "failed";
+        return can ? emojis : [];
+    }
+
+    /** Its reactions (who, on hover), and the picker when it's open: only
+     * when there's any, not to take a line under every message. */
+    renderReactions(message, me, participants) {
+        const emojis = this.reactable(message);
+        const reactions = (message.reactions ?? []).filter((r) => r.by?.length);
+        const open = this.picking === message.id && emojis.length > 0;
+        if (!reactions.length && !open) return null;
+        const mine = new Set(
+            reactions.filter((r) => r.by.includes(me)).map((r) => r.emoji),
+        );
+        const row = element("div", "chat-reactions");
+        for (const reaction of reactions) {
+            const names = reaction.by.map((id) =>
+                id === me
+                    ? this._texts.you
+                    : (participants.get(id)?.name ?? "?"),
+            );
+            const button = element("button", "chat-reaction");
+            button.type = "button";
+            button.dataset.emoji = reaction.emoji;
+            button.append(
+                element("span", "chat-reaction-emoji", reaction.emoji),
+                element("span", "chat-reaction-count", reaction.by.length),
+            );
+            button.title = names.join(", ");
+            button.setAttribute(
+                "aria-label",
+                `${reaction.emoji} ${button.title}`,
+            );
+            button.setAttribute(
+                "aria-pressed",
+                String(mine.has(reaction.emoji)),
+            );
+            button.disabled = !emojis.length;
+            button.addEventListener("click", () =>
+                this.react(message, reaction.emoji, !mine.has(reaction.emoji)),
+            );
+            row.append(button);
+        }
+        if (open) {
+            const picker = element("div", "chat-react-picker");
+            picker.setAttribute("role", "group");
+            picker.setAttribute("aria-label", this._texts.react);
+            picker.addEventListener("keydown", (event) => {
+                if (event.key === "Escape") this.pick(null, message.id);
+            });
+            for (const emoji of emojis) {
+                const choice = element("button", "chat-react-choice", emoji);
+                choice.type = "button";
+                choice.dataset.emoji = emoji;
+                choice.setAttribute("aria-pressed", String(mine.has(emoji)));
+                choice.addEventListener("click", () => {
+                    this.picking = null;
+                    this.react(message, emoji, !mine.has(emoji));
+                });
+                picker.append(choice);
+            }
+            row.append(picker);
+        }
+        return row;
+    }
+
+    /** The button that opens the picker, next to the time. */
+    renderReactButton(message) {
+        const open = this.picking === message.id;
+        const add = element("button", "chat-react", "☺");
+        add.type = "button";
+        add.title = this._texts.react;
+        add.setAttribute("aria-label", this._texts.react);
+        add.setAttribute("aria-expanded", String(open));
+        add.addEventListener("click", () =>
+            this.pick(open ? null : message.id),
+        );
+        return add;
+    }
+
+    /** Open the reaction picker of a message (null: close it), keeping the
+     * focus where it makes sense. */
+    pick(id, back = this.picking) {
+        this.picking = id;
+        this.render();
+        const node = this.messageNode(id ?? back);
+        node?.querySelector(id ? ".chat-react-choice" : ".chat-react")?.focus();
+    }
+
+    /** The node of a message in the list. */
+    messageNode(id) {
+        return [...this.list.children].find((node) => node.dataset.id === id);
+    }
+
+    react(message, emoji, active) {
+        this._client.react(message.id, emoji, active).catch(() => {
+            // The server's message.updated says what is; nothing changed.
+        });
+        this.pick(null, message.id);
     }
 
     renderMeta(message, own, receipts) {

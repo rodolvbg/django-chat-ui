@@ -66,6 +66,18 @@ export function attachmentTypes(conversation) {
     return attachments ? (attachments.types ?? []) : [];
 }
 
+/** The reactions offered when a conversation doesn't list its own. */
+export const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
+/** The emojis to react with (section 6.1); empty: no reactions here. */
+export function reactionEmojis(conversation) {
+    const reactions = capability(conversation, "reactions");
+    if (!reactions) return [];
+    return Array.isArray(reactions.emojis) && reactions.emojis.length
+        ? reactions.emojis
+        : DEFAULT_REACTIONS;
+}
+
 let counter = 0;
 
 /** A unique id for commands and optimistic messages. */

@@ -323,7 +323,7 @@ them). The interface adapts to them; it never checks `channel`.
 | `streaming` | boolean | Messages may arrive with `streaming` and `message.delta`. |
 | `buttons` | boolean | `buttons` and `card` parts, and the `action` command. |
 | `replies` | boolean | `replyTo` on sent messages. |
-| `reactions` | boolean | `message.react`. |
+| `reactions` | `false`, `true` or `{ emojis }` | `message.react`. With `emojis`, only those (the interface offers them); otherwise any emoji. |
 | `edit` / `delete` | boolean | `message.edit` / `message.delete` on own messages. |
 | `history` | boolean | Older messages can be fetched (section 9). |
 | `composer` | object | What the user may write: |

@@ -514,6 +514,37 @@ def test_react_to_any_message(customer_chat, agent_chat, customer, agent, conver
 # read, typing, action, history ------------------------------------------------
 
 
+def test_reactions_can_be_limited(customer_chat, agent, conversation):
+    services.update_conversation(
+        conversation, capabilities={"reactions": {"emojis": ["👍", "✅"]}}
+    )
+    message = services.post(conversation, agent, text("Done"))
+    customer_chat.ok("message.react", {"id": str(message.pk), "emoji": "✅"})
+    error = customer_chat.error("message.react", {"id": str(message.pk), "emoji": "🍕"})
+    assert error == {
+        "code": "unsupported",
+        "retry": False,
+        "message": "That reaction isn't allowed here.",
+    }
+    # Turned off: nobody reacts.
+    services.update_conversation(conversation, capabilities={"reactions": False})
+    error = customer_chat.error("message.react", {"id": str(message.pk), "emoji": "✅"})
+    assert error["code"] == "unsupported"
+
+
+def test_no_reactions_to_deleted_messages(customer_chat, agent, conversation):
+    message = services.post(conversation, agent, text("Oops"))
+    services.update_message(message, deleted=True)
+    error = customer_chat.error("message.react", {"id": str(message.pk), "emoji": "👍"})
+    assert error["code"] == "forbidden"
+
+
+def test_reactions_are_off_unless_a_site_turns_them_on():
+    from django_chat_ui.backend import ChatBackend
+
+    assert "reactions" not in ChatBackend().new_capabilities("web")
+
+
 def test_read(customer_chat, customer, agent, conversation, seq):
     first = services.post(conversation, agent, text("1"))
     services.post(conversation, agent, text("2"))

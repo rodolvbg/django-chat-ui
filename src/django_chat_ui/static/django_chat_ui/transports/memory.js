@@ -219,6 +219,39 @@ const COMMANDS = {
         });
         this.onMessage?.(message, this);
     },
+    "message.react"(data, frame) {
+        const message = [...this.messages.values()]
+            .flat()
+            .find((m) => m.id === data.id);
+        const conversation =
+            message && this.conversations.get(message.conversation);
+        if (!conversation?.capabilities?.reactions) {
+            this.answer(
+                "error",
+                { code: message ? "unsupported" : "not_found" },
+                frame.id,
+            );
+            return;
+        }
+        const reactions = new Map(
+            (message.reactions ?? []).map((r) => [
+                r.emoji,
+                r.by.filter((p) => p !== this.me.id),
+            ]),
+        );
+        const by = reactions.get(data.emoji) ?? [];
+        if (data.active !== false) by.push(this.me.id);
+        reactions.set(data.emoji, by);
+        message.reactions = [...reactions]
+            .filter(([, who]) => who.length)
+            .map(([emoji, who]) => ({ emoji, by: who }));
+        this.answer("ack", {}, frame.id);
+        this.emit("message.updated", {
+            id: message.id,
+            conversation: message.conversation,
+            reactions: message.reactions,
+        });
+    },
     action(data, frame) {
         this.answer("ack", {}, frame.id);
         this.onAction?.(data, this);

@@ -398,6 +398,76 @@ chat-thread[hidden] {
     font-size: 0.8125rem;
 }
 
+.chat-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    margin: 2px 4px 0;
+}
+
+.chat-reaction,
+.chat-react-choice {
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+    padding: 0 7px;
+    border: 1px solid var(--chat-border);
+    border-radius: 999px;
+    background: var(--chat-bg);
+    color: var(--chat-fg);
+    font: inherit;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    cursor: pointer;
+}
+
+.chat-reaction[aria-pressed="true"],
+.chat-react-choice[aria-pressed="true"] {
+    border-color: var(--chat-accent);
+    background: var(--chat-selected);
+}
+
+.chat-reaction:disabled {
+    cursor: default;
+}
+
+.chat-react {
+    padding: 0 4px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--chat-muted);
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+/* With a mouse, the way to react shows where the pointer (or the focus) is. */
+@media (hover: hover) {
+    .chat-message:not(:hover, :focus-within)
+        .chat-react[aria-expanded="false"] {
+        opacity: 0;
+    }
+}
+
+.chat-react-picker {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--chat-border);
+    border-radius: 999px;
+    background: var(--chat-bg);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+}
+
+.chat-react-choice {
+    padding: 0 4px;
+    border-color: transparent;
+    font-size: 1.125rem;
+}
+
 /* <chat-inbox> (chat-inbox.js) */
 
 chat-inbox {

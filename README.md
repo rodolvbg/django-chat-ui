@@ -37,6 +37,10 @@ system's dark mode:
 
 ![The inbox, dark](docs/screenshots/inbox-dark.png)
 
+Reactions, where a conversation allows them (here, only some emojis):
+
+![Reactions to a message of the team, and the picker open on another](docs/screenshots/reactions.png)
+
 ## With Django
 
 ```bash
@@ -115,6 +119,12 @@ class Backend(ChatBackend):
 ```python
 CHAT_UI = {"BACKEND": "myapp.chat.Backend"}
 ```
+
+Reactions are off unless a conversation's capabilities turn them on:
+`"reactions": True` (any emoji; the interface offers a few), or
+`"reactions": {"emojis": ["👍", "✅", "👀"]}` (only those). In
+`new_capabilities()` for the conversations it starts, or for any one with
+`services.update_conversation(conversation, capabilities={"reactions": True})`.
 
 Its hooks: `get_participant`, `conversations`, `can_start`, `start`,
 `support_team`, `new_capabilities`, `before_send`, `on_start`,

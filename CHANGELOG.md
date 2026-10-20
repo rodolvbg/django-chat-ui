@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `services` for integrations; `ChatBackend` to decide who chats and what
   happens (its hooks inline, in a thread, or wherever `run_hook()` sends
   them); `{% chat_ui %}`; the admin; `chat_ui_prune`.
+- Reactions: shown under the messages, and added from a picker, in the
+  conversations whose `reactions` capability allows them (any emoji, or a
+  list).
 - What the server sends is degraded for what each client says it renders.
 - The WebSocket transport, with Channels (`django-chat-ui[channels]`).
 - Spanish translation.

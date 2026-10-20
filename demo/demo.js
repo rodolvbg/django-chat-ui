@@ -68,6 +68,7 @@ server.addConversation(
         capabilities: {
             receipts: true,
             typing: true,
+            reactions: true,
             attachments: { types: ["image", "file"] },
             composer: { mode: "free" },
         },
@@ -87,6 +88,7 @@ server.addConversation(
             createdAt: minutesAgo(28),
             status: "read",
             parts: [{ type: "text", text: "Yes! Here's a photo." }],
+            reactions: [{ emoji: "❤️", by: ["p_ana"] }],
         },
         {
             id: "w3",
@@ -124,6 +126,7 @@ server.addConversation(
         capabilities: {
             receipts: true,
             typing: true,
+            reactions: { emojis: ["👍", "✅", "👀", "🎉"] },
             composer: { mode: "free" },
         },
     },

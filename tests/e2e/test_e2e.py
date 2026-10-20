@@ -147,3 +147,27 @@ def test_in_spanish(live_server, browser: Browser):
     expect(page.locator(".chat-widget-close")).to_have_attribute(
         "aria-label", "Cerrar el chat"
     )
+
+
+def test_reactions(agent_page: Page, visitor_page: Page):
+    agent, visitor = agent_page, visitor_page
+    visitor.locator(".chat-widget-launcher").click()
+    widget = visitor.locator("chat-widget chat-thread")
+    widget.locator(".chat-input").fill("Do you ship abroad?")
+    widget.locator(".chat-input").press("Enter")
+
+    agent.locator(".chat-conversation").first.click()
+    thread = agent.locator("chat-inbox chat-thread")
+    asked = thread.locator(".chat-message", has_text="Do you ship abroad?")
+    asked.hover()
+    asked.get_by_role("button", name="React").click()
+    asked.get_by_role("button", name="👍").click()
+
+    # The visitor sees who reacted, and reacts too.
+    seen = widget.locator(".chat-message", has_text="Do you ship abroad?")
+    reaction = seen.locator(".chat-reaction")
+    expect(reaction).to_have_text("👍1")
+    expect(reaction).to_have_attribute("title", "Rodolfo")
+    reaction.click()
+    expect(asked.locator(".chat-reaction")).to_have_text("👍2")
+    expect(asked.locator(".chat-reaction")).to_have_attribute("aria-pressed", "true")

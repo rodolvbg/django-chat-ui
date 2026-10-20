@@ -36,6 +36,7 @@ class Command(BaseCommand):
                 "receipts": True,
                 "typing": True,
                 "history": True,
+                "reactions": True,
                 "composer": {"mode": "free"},
             },
         )
@@ -44,16 +45,23 @@ class Command(BaseCommand):
             anna,
             [{"type": "text", "text": "Hi, do you have the blue one in M?"}],
         )
-        services.post(
+        aside = services.post(
             whatsapp, me, [{"type": "text", "text": "Yes! I'll put one aside."}]
         )
+        services.update_message(aside, reactions=[{"emoji": "❤️", "by": [str(anna.pk)]}])
         services.post(whatsapp, anna, [{"type": "text", "text": "Perfect, thanks 🙌"}])
 
         team = services.create_conversation(
             [me, lucy],
             channel="internal",
             title="Support team",
-            capabilities={"receipts": True, "typing": True, "history": True},
+            capabilities={
+                "receipts": True,
+                "typing": True,
+                "history": True,
+                # The team reacts with these only.
+                "reactions": {"emojis": ["👍", "✅", "👀", "🎉"]},
+            },
         )
         services.post(
             team,

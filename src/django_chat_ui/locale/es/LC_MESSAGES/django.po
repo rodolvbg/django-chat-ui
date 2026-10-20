@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-chat-ui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 14:05+0200\n"
+"POT-Creation-Date: 2026-10-20 15:39+0200\n"
 "PO-Revision-Date: 2026-10-20 14:10+0200\n"
 "Last-Translator: Rodolfo Becerra\n"
 "Language-Team: Spanish\n"
@@ -129,6 +129,10 @@ msgstr "Ese mensaje se borró."
 #: commands.py
 msgid "That isn't an emoji."
 msgstr "Eso no es un emoji."
+
+#: commands.py
+msgid "That reaction isn't allowed here."
+msgstr "Esa reacción no se permite aquí."
 
 #: commands.py
 msgid "There is no such button."
@@ -404,6 +408,16 @@ msgstr "Mensajes"
 
 #: texts.py
 msgctxt "chat"
+msgid "React"
+msgstr "Reaccionar"
+
+#: texts.py
+msgctxt "chat"
+msgid "You"
+msgstr "Tú"
+
+#: texts.py
+msgctxt "chat"
 msgid "Search conversations"
 msgstr "Buscar conversaciones"
 
@@ -457,11 +471,6 @@ msgstr "Mensaje de voz"
 msgctxt "chat"
 msgid "Location"
 msgstr "Ubicación"
-
-#: texts.py
-msgctxt "chat"
-msgid "You"
-msgstr "Tú"
 
 #: texts.py
 msgctxt "chat"

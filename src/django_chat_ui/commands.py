@@ -463,6 +463,12 @@ def message_react(self: Command, data: dict[str, Any]) -> Answer:
     emoji = data.get("emoji")
     if not isinstance(emoji, str) or not 0 < len(emoji) <= 16:
         raise ProtocolError("bad_request", _("That isn't an emoji."))
+    allowed = message.conversation.capabilities["reactions"]
+    if isinstance(allowed, dict) and allowed.get("emojis"):
+        if emoji not in allowed["emojis"]:
+            raise ProtocolError("unsupported", _("That reaction isn't allowed here."))
+    if message.deleted:
+        raise ProtocolError("forbidden", _("That message was deleted."))
     me = str(self.participant.pk)
     reactions = {r["emoji"]: list(r.get("by", [])) for r in message.reactions}
     by = [p for p in reactions.get(emoji, []) if p != me]

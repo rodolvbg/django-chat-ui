@@ -58,7 +58,7 @@ export class WebSocketTransport {
         if (!this.hello) return;
         // Hello again, from the last event it got (8.3).
         this.reconnects += 1;
-        const { resume, ...data } = this.hello.data ?? {};
+        const { resume: _resume, ...data } = this.hello.data ?? {};
         this.socket.send(
             JSON.stringify({
                 ...this.hello,

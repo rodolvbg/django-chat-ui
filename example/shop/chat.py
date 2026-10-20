@@ -58,7 +58,12 @@ class DemoBackend(ChatBackend):
     hooks = "thread"
 
     def new_capabilities(self, channel: str) -> dict[str, Any]:
-        return {**super().new_capabilities(channel), "buttons": True, "streaming": True}
+        return {
+            **super().new_capabilities(channel),
+            "buttons": True,
+            "streaming": True,
+            "reactions": True,
+        }
 
     def support_team(self, channel: str) -> list[Participant]:
         return [*super().support_team(channel), assistant()]

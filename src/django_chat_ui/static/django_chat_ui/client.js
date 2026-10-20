@@ -207,6 +207,11 @@ export class ChatClient extends EventTarget {
         return this.command("action", { conversation, message, button });
     }
 
+    /** React to a message with `emoji` (or take the reaction back). */
+    react(message, emoji, active = true) {
+        return this.command("message.react", { id: message, emoji, active });
+    }
+
     read(conversation, until) {
         return this.command("message.read", { conversation, until });
     }
