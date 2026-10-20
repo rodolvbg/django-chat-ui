@@ -29,3 +29,6 @@ jobs:
 
       - name: Run Pytest
         run: uv run pytest
+
+      - name: Run Pytest with a site's own models
+        run: uv run pytest --ds tests.settings_swapped --cov-append

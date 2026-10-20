@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, Any
 
 from django_chat_ui import services
 from django_chat_ui.backend import ChatBackend
-from django_chat_ui.models import Conversation, Message, Participant
+from django_chat_ui.models import (
+    AbstractConversation,
+    AbstractParticipant,
+    Message,
+    get_participant_model,
+)
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -35,14 +40,16 @@ ANSWERS = {
 }
 
 
-def assistant() -> Participant:
-    bot, _ = Participant.objects.get_or_create(
+def assistant() -> AbstractParticipant:
+    bot, _ = get_participant_model().objects.get_or_create(
         kind="bot", handle="shop-assistant", defaults={"name": "Assistant"}
     )
     return bot
 
 
-def say(conversation: Conversation, chunks: list[str], delay: float = 0.12) -> Message:
+def say(
+    conversation: AbstractConversation, chunks: list[str], delay: float = 0.12
+) -> Message:
     message = services.start_stream(conversation, assistant())
     for chunk in chunks:
         time.sleep(delay)
@@ -65,7 +72,30 @@ class DemoBackend(ChatBackend):
             "reactions": True,
         }
 
-    def support_team(self, channel: str) -> list[Participant]:
+    def serialize_participant(self, participant, data):
+        # A contact's company (helpdesk.Contact), for the "shop" extension.
+        if getattr(participant, "company", ""):
+            data["ext"] = {
+                **data.get("ext", {}),
+                "shop": {"company": participant.company},
+            }
+        return data
+
+    def serialize_conversation(self, conversation, data):
+        # The fields of the shop's tickets (helpdesk.Ticket), for whoever
+        # knows the "shop" extension; others ignore them.
+        if hasattr(conversation, "priority"):
+            assignee = conversation.assignee
+            data["ext"] = {
+                **data.get("ext", {}),
+                "shop": {
+                    "priority": conversation.get_priority_display().lower(),
+                    "assignee": assignee.get_username() if assignee else None,
+                },
+            }
+        return data
+
+    def support_team(self, channel: str) -> list[AbstractParticipant]:
         return [*super().support_team(channel), assistant()]
 
     def on_start(self, request, conversation, participant) -> None:
@@ -94,6 +124,11 @@ class DemoBackend(ChatBackend):
             # Someone of the team answers: it's theirs now, and it says so
             # before their first message.
             services.update_conversation(conversation, state="open")
+            if hasattr(conversation, "assignee_id") and participant.user_id:
+                # The ticket is theirs (a field of the shop's own model).
+                type(conversation).objects.filter(pk=conversation.pk).update(
+                    assignee_id=participant.user_id
+                )
             services.system(conversation, f"{participant.name} joined", code="joined")
 
     def on_message(self, request: HttpRequest, message: Message) -> None:

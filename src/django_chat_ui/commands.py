@@ -15,11 +15,20 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from django.db import IntegrityError
+from django.db.models import Prefetch
 from django.urls import Resolver404, resolve, reverse
 from django.utils.translation import gettext as _
 
 from . import protocol, services
-from .models import Attachment, Conversation, Event, Membership, Message, Participant
+from .models import (
+    AbstractConversation,
+    AbstractParticipant,
+    Attachment,
+    Event,
+    Membership,
+    Message,
+    get_participant_model,
+)
 from .protocol import ProtocolError, frame
 
 if TYPE_CHECKING:
@@ -31,6 +40,12 @@ Answer = list[dict[str, Any]]
 Handler = Callable[["Command", dict[str, Any]], Answer]
 
 HANDLERS: dict[str, Handler] = {}
+
+#: The memberships of conversations, with their participants, in order.
+MEMBERS = Prefetch(
+    "memberships",
+    queryset=Membership.objects.select_related("participant").order_by("id"),
+)
 
 ATTACHMENTS = {"image", "video", "audio", "file"}
 MAX_PARTS = 20
@@ -56,7 +71,10 @@ def client_capabilities(request: HttpRequest) -> dict[str, Any] | None:
 
 
 def handle(
-    backend: ChatBackend, request: HttpRequest, participant: Participant, raw: Any
+    backend: ChatBackend,
+    request: HttpRequest,
+    participant: AbstractParticipant,
+    raw: Any,
 ) -> Answer:
     """Answer one command frame, as its client can take the answers."""
     answers = answer(backend, request, participant, raw)
@@ -66,7 +84,10 @@ def handle(
 
 
 def answer(
-    backend: ChatBackend, request: HttpRequest, participant: Participant, raw: Any
+    backend: ChatBackend,
+    request: HttpRequest,
+    participant: AbstractParticipant,
+    raw: Any,
 ) -> Answer:
     if not isinstance(raw, dict) or not isinstance(raw.get("type"), str):
         return [frame("error", ProtocolError("bad_request", _("Not a frame.")).data())]
@@ -93,7 +114,7 @@ class Command:
         self,
         backend: ChatBackend,
         request: HttpRequest,
-        participant: Participant,
+        participant: AbstractParticipant,
         ref: Any,
     ):
         self.backend = backend
@@ -117,21 +138,16 @@ class Command:
 
     # Lookups ---------------------------------------------------------------
 
-    def conversation(self, data: dict[str, Any]) -> Conversation:
+    def conversation(self, data: dict[str, Any]) -> AbstractConversation:
         pk = data.get("conversation")
         found = None
         if isinstance(pk, str) and pk.isdigit():
-            found = (
-                self.backend.conversations(self.participant)
-                .filter(pk=pk)
-                .select_related("last_message")
-                .first()
-            )
+            found = self.backend.conversations(self.participant).filter(pk=pk).first()
         if found is None:
             raise ProtocolError("not_found", _("There is no such conversation."))
         return found
 
-    def message(self, conversation: Conversation, pk: Any) -> Message:
+    def message(self, conversation: AbstractConversation, pk: Any) -> Message:
         found = None
         if isinstance(pk, str) and pk.isdigit():
             found = conversation.messages.filter(pk=pk).first()
@@ -158,7 +174,7 @@ class Command:
             raise ProtocolError("forbidden", _("It isn't your message."))
         return found
 
-    def unread(self, conversation: Conversation) -> int:
+    def unread(self, conversation: AbstractConversation) -> int:
         membership = Membership.objects.filter(
             conversation=conversation, participant=self.participant
         ).first()
@@ -166,7 +182,9 @@ class Command:
 
     # Parts -----------------------------------------------------------------
 
-    def parts(self, conversation: Conversation, parts: Any) -> list[dict[str, Any]]:
+    def parts(
+        self, conversation: AbstractConversation, parts: Any
+    ) -> list[dict[str, Any]]:
         """The parts of a message ``participant`` sends, checked against the
         composer and rebuilt from what the server knows."""
         if not isinstance(parts, list) or not 0 < len(parts) <= MAX_PARTS:
@@ -195,7 +213,7 @@ class Command:
         return checked
 
     def part(
-        self, conversation: Conversation, part: dict[str, Any], composer: dict
+        self, conversation: AbstractConversation, part: dict[str, Any], composer: dict
     ) -> dict[str, Any]:
         type = part["type"]
         if type == "text":
@@ -222,7 +240,7 @@ class Command:
         raise ProtocolError("unsupported", _("That can't be sent here."))
 
     def attachment(
-        self, conversation: Conversation, part: dict[str, Any]
+        self, conversation: AbstractConversation, part: dict[str, Any]
     ) -> dict[str, Any]:
         """An uploaded file: only one uploaded to this conversation (its
         part is rebuilt from it: a client can't point to any other URL)."""
@@ -245,7 +263,7 @@ class Command:
         return attachment_part(upload, part["type"])
 
 
-def require(conversation: Conversation, capability: str) -> None:
+def require(conversation: AbstractConversation, capability: str) -> None:
     """A command the conversation doesn't allow is rejected (7.3)."""
     if not conversation.capabilities.get(capability):
         raise ProtocolError("unsupported", _("This conversation doesn't allow it."))
@@ -305,7 +323,7 @@ def limit(data: dict[str, Any]) -> int:
 
 
 def page(
-    conversation: Conversation, before: Message | None, size: int
+    conversation: AbstractConversation, before: Message | None, size: int
 ) -> dict[str, Any]:
     """A page of messages, oldest first (section 9)."""
     messages = conversation.messages.all()
@@ -349,8 +367,7 @@ def hello(self: Command, data: dict[str, Any]) -> Answer:
 
     conversations = (
         self.backend.conversations(self.participant)
-        .select_related("last_message")
-        .prefetch_related("participants")
+        .prefetch_related(MEMBERS)
         .distinct()
     )
     unread = dict(
@@ -387,12 +404,16 @@ def conversation_open(self: Command, data: dict[str, Any]) -> Answer:
     ]
 
 
-def start(self: Command, data: dict[str, Any]) -> Conversation:
+def start(self: Command, data: dict[str, Any]) -> AbstractConversation:
     ids = data.get("with")
     if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
         raise ProtocolError("bad_request", _("`with` must list participant ids."))
     wanted = {i for i in ids if i != str(self.participant.pk)}
-    others = list(Participant.objects.filter(pk__in=[i for i in wanted if i.isdigit()]))
+    others = list(
+        get_participant_model().objects.filter(
+            pk__in=[i for i in wanted if i.isdigit()]
+        )
+    )
     if len(others) != len(wanted):
         raise ProtocolError("not_found", _("There is no such participant."))
     channel = data.get("channel") or "web"

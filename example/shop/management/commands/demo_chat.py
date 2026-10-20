@@ -7,7 +7,17 @@ from django.core.management.base import BaseCommand
 
 from django_chat_ui import services
 from django_chat_ui.backend import get_backend
-from django_chat_ui.models import Participant
+from django_chat_ui.models import get_conversation_model, get_participant_model
+
+
+def is_ticket() -> bool:
+    return hasattr(get_conversation_model(), "priority")
+
+
+def company() -> dict[str, str]:
+    # The field of the shop's contacts (helpdesk.Contact), if they are.
+    has = any(f.name == "company" for f in get_participant_model()._meta.fields)
+    return {"company": "Acme Inc."} if has else {}
 
 
 class Command(BaseCommand):
@@ -25,13 +35,16 @@ class Command(BaseCommand):
         backend = get_backend()
         me = backend.participant_for_user(users["admin"])
         lucy = backend.participant_for_user(users["lucy"])
-        anna = Participant.objects.create(
-            kind="contact", name="Anna Smith", handle="+1 555 0100"
+        anna = get_participant_model().objects.create(
+            kind="contact", name="Anna Smith", handle="+1 555 0100", **company()
         )
 
+        # With the fields of the shop's tickets (helpdesk.Ticket), if they are.
+        ticket = {"priority": 2, "assignee": users["admin"]} if is_ticket() else {}
         whatsapp = services.create_conversation(
             [me, anna],
             channel="whatsapp",
+            **ticket,
             capabilities={
                 "receipts": True,
                 "typing": True,

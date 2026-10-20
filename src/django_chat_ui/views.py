@@ -22,7 +22,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from . import commands, stream
 from .backend import get_backend
-from .models import Attachment, Participant
+from .models import AbstractParticipant, Attachment
 from .protocol import ProtocolError, frame
 
 MAX_FRAMES = 20
@@ -166,7 +166,7 @@ def upload(request: HttpRequest) -> JsonResponse:
 def download(request: HttpRequest, pk: int, name: str) -> FileResponse:
     """An attachment, only for those who see its conversation."""
     backend = get_backend()
-    participant: Participant | None = backend.get_participant(request)
+    participant: AbstractParticipant | None = backend.get_participant(request)
     if participant is None:
         raise Http404
     visible = backend.conversations(participant).values("pk")

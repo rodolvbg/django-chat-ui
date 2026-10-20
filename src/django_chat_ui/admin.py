@@ -1,12 +1,20 @@
 """The conversations in the admin: to look at them, not to chat (changes
-made here reach no open interface; use the services or the chat)."""
+made here reach no open interface; use the services or the chat).
+
+With models of a site's own (``CHAT_UI_CONVERSATION_MODEL``,
+``CHAT_UI_PARTICIPANT_MODEL``), register them with these classes, as one
+does with ``UserAdmin``:
+
+    @admin.register(Ticket)
+    class TicketAdmin(ConversationAdmin):
+        list_display = [*ConversationAdmin.list_display, "priority"]
+"""
 
 from django.contrib import admin
 
 from .models import Attachment, Conversation, Membership, Message, Participant
 
 
-@admin.register(Participant)
 class ParticipantAdmin(admin.ModelAdmin):
     list_display = ["__str__", "kind", "handle", "user", "created"]
     list_filter = ["kind"]
@@ -32,13 +40,19 @@ class MessageInline(admin.TabularInline):
         return False
 
 
-@admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
     list_display = ["__str__", "channel", "state", "updated"]
     list_filter = ["channel", "state"]
     search_fields = ["title"]
-    raw_id_fields = ["last_message"]
+    readonly_fields = ["last_message"]
     inlines = [MembershipInline, MessageInline]
+
+
+# This package's models, unless a site swapped them for its own.
+if not Participant._meta.swapped:
+    admin.site.register(Participant, ParticipantAdmin)
+if not Conversation._meta.swapped:
+    admin.site.register(Conversation, ConversationAdmin)
 
 
 @admin.register(Message)

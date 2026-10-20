@@ -143,13 +143,22 @@ report.skip_covered = true
 [tool.tox]
 env_list = [
   "py314-dj52",
+  "py314-dj52-swapped",
   "py313-dj51",
   "py312-dj42",
   "py312-dj50",
   "py310-dj42",
+  "py310-dj42-swapped",
   "py310-dj50",
   "py310-dj51",
   "py310-dj52",
+]
+env.py310-dj42-swapped.commands = [
+  [ "pytest", "tests", "--ignore=tests/e2e", "--no-cov", "--ds", "tests.settings_swapped", "{posargs}" ],
+]
+# A site's own models (the example's helpdesk.Ticket and helpdesk.Contact).
+env.py314-dj52-swapped.commands = [
+  [ "pytest", "tests", "--ignore=tests/e2e", "--no-cov", "--ds", "tests.settings_swapped", "{posargs}" ],
 ]
 # --no-cov: the environments run in parallel, and would share one .coverage.
 env_run_base.commands = [ [ "pytest", "tests", "--ignore=tests/e2e", "--no-cov", "{posargs}" ] ]

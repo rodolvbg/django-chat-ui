@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .models import Conversation, Message, Participant
+    from .models import AbstractConversation, AbstractParticipant, Message
 
 PROTOCOL_VERSIONS = ["1.0"]
 
@@ -73,8 +73,14 @@ def _compact(data: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in data.items() if value not in (None, "", {})}
 
 
-def participant(p: Participant) -> dict[str, Any]:
-    return _compact(
+def _backend() -> Any:
+    from .backend import get_backend
+
+    return get_backend()
+
+
+def participant(p: AbstractParticipant) -> dict[str, Any]:
+    data = _compact(
         {
             "id": str(p.pk),
             "kind": p.kind,
@@ -85,6 +91,7 @@ def participant(p: Participant) -> dict[str, Any]:
             "meta": p.meta,
         }
     )
+    return _backend().serialize_participant(p, data)
 
 
 def message(m: Message) -> dict[str, Any]:
@@ -114,7 +121,7 @@ def message(m: Message) -> dict[str, Any]:
 
 
 def conversation(
-    c: Conversation, *, unread: int | None = None, participants: bool = True
+    c: AbstractConversation, *, unread: int | None = None, participants: bool = True
 ) -> dict[str, Any]:
     """A conversation as one participant sees it (``unread`` is theirs)."""
     data = _compact(
@@ -130,12 +137,13 @@ def conversation(
     )
     data["capabilities"] = c.capabilities
     if participants:
-        data["participants"] = [participant(p) for p in c.participants.all()]
+        # Through its memberships: prefetched, they cost no query.
+        data["participants"] = [participant(m.participant) for m in c.memberships.all()]
     if unread is not None:
         data["unread"] = unread
-    if c.last_message_id:
-        data["lastMessage"] = message(c.last_message)  # type: ignore[arg-type]
-    return data
+    if c.last_message:
+        data["lastMessage"] = c.last_message
+    return _backend().serialize_conversation(c, data)
 
 
 def frame(type: str, data: dict[str, Any] | None = None, ref: Any = None) -> dict:

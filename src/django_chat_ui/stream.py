@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
 
     from .backend import ChatBackend
-    from .models import Participant
+    from .models import AbstractParticipant
 
 BATCH = 500
 
@@ -44,7 +44,7 @@ class Reader:
     def __init__(
         self,
         backend: ChatBackend,
-        participant: Participant,
+        participant: AbstractParticipant,
         after: int | None,
         capabilities: dict[str, Any] | None = None,
     ):

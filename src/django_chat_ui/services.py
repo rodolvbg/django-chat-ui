@@ -12,14 +12,21 @@ delivering a message or a receipt, an assignment rule adding an agent.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
 from . import protocol
-from .models import Conversation, Event, Membership, Message, Participant
+from .models import (
+    AbstractConversation,
+    AbstractParticipant,
+    Event,
+    Membership,
+    Message,
+    get_conversation_model,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -29,8 +36,8 @@ def emit(
     type: str,
     data: dict[str, Any],
     *,
-    conversation: Conversation | None = None,
-    recipient: Participant | None = None,
+    conversation: AbstractConversation | None = None,
+    recipient: AbstractParticipant | None = None,
 ) -> Event:
     """Record an event: for everyone in ``conversation``, or only for
     ``recipient``. Extensions emit their own (``acme.order.updated``)."""
@@ -51,7 +58,7 @@ def after(message: Message) -> Q:
 
 @transaction.atomic
 def create_conversation(
-    participants: Iterable[Participant],
+    participants: Iterable[AbstractParticipant],
     *,
     channel: str = "web",
     title: str = "",
@@ -59,18 +66,24 @@ def create_conversation(
     capabilities: dict[str, Any] | None = None,
     ext: dict[str, Any] | None = None,
     meta: dict[str, Any] | None = None,
-) -> Conversation:
-    conversation = Conversation.objects.create(
+    **fields: Any,
+) -> AbstractConversation:
+    """A new conversation of ``participants``; ``fields``, those of a site's
+    own model (``CHAT_UI_CONVERSATION_MODEL``): its priority, say."""
+    conversation = get_conversation_model().objects.create(
         channel=channel,
         title=title,
         state=state,
         capabilities=capabilities or {},
         ext=ext or {},
         meta=meta or {},
+        **fields,
     )
     members = list(dict.fromkeys(participants))
     Membership.objects.bulk_create(
-        Membership(conversation=conversation, participant=p) for p in members
+        # Any participant model (mypy only knows the settings' one).
+        Membership(conversation=conversation, participant=cast(Any, p))
+        for p in members
     )
     data = protocol.conversation(conversation, unread=0)
     for p in members:
@@ -79,7 +92,9 @@ def create_conversation(
 
 
 @transaction.atomic
-def add_participant(conversation: Conversation, participant: Participant) -> Membership:
+def add_participant(
+    conversation: AbstractConversation, participant: AbstractParticipant
+) -> Membership:
     membership, created = Membership.objects.get_or_create(
         conversation=conversation, participant=participant
     )
@@ -95,7 +110,9 @@ def add_participant(conversation: Conversation, participant: Participant) -> Mem
 
 
 @transaction.atomic
-def remove_participant(conversation: Conversation, participant: Participant) -> None:
+def remove_participant(
+    conversation: AbstractConversation, participant: AbstractParticipant
+) -> None:
     deleted, _ = Membership.objects.filter(
         conversation=conversation, participant=participant
     ).delete()
@@ -107,7 +124,7 @@ def remove_participant(conversation: Conversation, participant: Participant) -> 
 
 
 def _participants_changed(
-    conversation: Conversation, exclude: Participant | None = None
+    conversation: AbstractConversation, exclude: AbstractParticipant | None = None
 ) -> None:
     participants = [protocol.participant(p) for p in conversation.participants.all()]
     for membership in conversation.memberships.exclude(participant=exclude):
@@ -120,7 +137,9 @@ def _participants_changed(
 
 
 @transaction.atomic
-def update_conversation(conversation: Conversation, **changes: Any) -> Conversation:
+def update_conversation(
+    conversation: AbstractConversation, **changes: Any
+) -> AbstractConversation:
     """Change ``title``, ``state``, ``capabilities``, ``ext`` or ``meta``.
 
     Capabilities merge by key, as clients merge them: to turn one off, set
@@ -146,8 +165,8 @@ def update_conversation(conversation: Conversation, **changes: Any) -> Conversat
 
 @transaction.atomic
 def post(
-    conversation: Conversation,
-    author: Participant | None,
+    conversation: AbstractConversation,
+    author: AbstractParticipant | None,
     parts: list[dict[str, Any]],
     *,
     client_id: str = "",
@@ -172,7 +191,7 @@ def post(
     data = protocol.message(message)
     emit("message.created", data, conversation=conversation)
 
-    conversation.last_message = message
+    conversation.last_message = data
     conversation.updated = message.created
     conversation.save(update_fields=["last_message", "updated"])
     others = conversation.memberships.exclude(participant=author)
@@ -195,7 +214,7 @@ def post(
     return message
 
 
-def system(conversation: Conversation, text: str, code: str = "") -> Message:
+def system(conversation: AbstractConversation, text: str, code: str = "") -> Message:
     """An event in the thread: "Ana joined", "Assigned to support"."""
     part: dict[str, Any] = {"type": "system", "text": str(text)}
     if code:
@@ -233,21 +252,27 @@ def update_message(message: Message, **changes: Any) -> Message:
     message.save()
     conversation = message.conversation
     emit("message.updated", data, conversation=conversation)
-    if conversation.last_message_id == message.pk and {"parts", "deleted"} & set(
-        changes
-    ):
-        # What lists show of it changed too (a streamed message, finished).
-        emit(
-            "conversation.updated",
-            {"id": str(conversation.pk), "lastMessage": protocol.message(message)},
-            conversation=conversation,
-        )
+    # The conversation keeps a copy of its last message: if it's this one,
+    # the copy follows (read from the database: this object may be older).
+    conversations = type(conversation).objects.filter(pk=conversation.pk)
+    last = conversations.values_list("last_message", flat=True).first() or {}
+    if last.get("id") == str(message.pk):
+        snapshot = protocol.message(message)
+        conversations.update(last_message=snapshot)
+        conversation.last_message = snapshot
+        if {"parts", "deleted"} & set(changes):
+            # What lists show of it changed too (a streamed message, finished).
+            emit(
+                "conversation.updated",
+                {"id": str(conversation.pk), "lastMessage": snapshot},
+                conversation=conversation,
+            )
     return message
 
 
 def start_stream(
-    conversation: Conversation,
-    author: Participant,
+    conversation: AbstractConversation,
+    author: AbstractParticipant,
     parts: list[dict[str, Any]] | None = None,
 ) -> Message:
     """A message a bot is still writing: then ``delta()``, then ``finish()``."""
@@ -286,7 +311,9 @@ def finish(message: Message, parts: list[dict[str, Any]] | None = None) -> Messa
 # Who is typing, and who read what --------------------------------------------
 
 
-def typing(conversation: Conversation, participant: Participant, active: bool) -> None:
+def typing(
+    conversation: AbstractConversation, participant: AbstractParticipant, active: bool
+) -> None:
     emit(
         "typing",
         {
@@ -299,7 +326,9 @@ def typing(conversation: Conversation, participant: Participant, active: bool) -
 
 
 @transaction.atomic
-def read(conversation: Conversation, participant: Participant, until: Message) -> None:
+def read(
+    conversation: AbstractConversation, participant: AbstractParticipant, until: Message
+) -> None:
     """``participant`` read everything up to ``until``: their unread count,
     and, with ``receipts``, the status of what they read."""
     unread = (

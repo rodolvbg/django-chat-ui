@@ -6,6 +6,7 @@ staff, chatting through django-chat-ui. Run it:
     python example/manage.py runserver
 """
 
+import os
 from pathlib import Path
 
 import django
@@ -24,6 +25,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_chat_ui",
+    "helpdesk",
     "shop",
 ]
 
@@ -66,7 +68,7 @@ WSGI_APPLICATION = "example.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": os.environ.get("EXAMPLE_DB", BASE_DIR / "db.sqlite3"),
         "OPTIONS": SQLITE_OPTIONS,
     }
 }
@@ -85,3 +87,9 @@ MEDIA_ROOT = BASE_DIR / "media"
 LOGIN_URL = "admin:login"
 
 CHAT_UI = {"BACKEND": "shop.chat.DemoBackend"}
+
+# The shop's own models of the chat (helpdesk/models.py): its
+# conversations are tickets (with a priority and an assignee), its
+# participants contacts (with their company).
+CHAT_UI_CONVERSATION_MODEL = "helpdesk.Ticket"
+CHAT_UI_PARTICIPANT_MODEL = "helpdesk.Contact"

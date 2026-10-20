@@ -20,7 +20,13 @@ from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
 
 from . import services
-from .models import Conversation, Message, Participant
+from .models import (
+    AbstractConversation,
+    AbstractParticipant,
+    Message,
+    get_conversation_model,
+    get_participant_model,
+)
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -32,7 +38,9 @@ logger = logging.getLogger("django_chat_ui")
 
 #: A command of an extension: ``(backend, request, participant, data)`` →
 #: the ``ack``'s data, or a list of frames ending with it.
-CommandHandler = Callable[["ChatBackend", "HttpRequest", Participant, dict], Any]
+CommandHandler = Callable[
+    ["ChatBackend", "HttpRequest", AbstractParticipant, dict], Any
+]
 
 
 class ChatBackend:
@@ -58,7 +66,7 @@ class ChatBackend:
 
     # Who -------------------------------------------------------------------
 
-    def get_participant(self, request: HttpRequest) -> Participant | None:
+    def get_participant(self, request: HttpRequest) -> AbstractParticipant | None:
         """The participant of this request, or None (403). Users get one on
         their first request; staff are agents."""
         user = request.user
@@ -67,16 +75,16 @@ class ChatBackend:
         if not self.allow_anonymous:
             return None
         pk = request.session.get(SESSION_KEY)
-        participant = Participant.objects.filter(pk=pk, user=None).first()
+        participant = get_participant_model().objects.filter(pk=pk, user=None).first()
         if participant is None:
-            participant = Participant.objects.create(
+            participant = get_participant_model().objects.create(
                 kind="contact", name=str(_("Visitor"))
             )
             request.session[SESSION_KEY] = participant.pk
         return participant
 
-    def participant_for_user(self, user: Any) -> Participant:
-        participant, _ = Participant.objects.get_or_create(
+    def participant_for_user(self, user: Any) -> AbstractParticipant:
+        participant, _ = get_participant_model().objects.get_or_create(
             user=user,
             defaults={
                 "kind": "agent" if user.is_staff else "user",
@@ -87,19 +95,41 @@ class ChatBackend:
 
     # What they see ---------------------------------------------------------
 
-    def conversations(self, participant: Participant) -> QuerySet[Conversation]:
+    def conversations(
+        self, participant: AbstractParticipant
+    ) -> QuerySet[AbstractConversation]:
         """The conversations ``participant`` sees: those they take part in.
         The stream only carries events of these."""
-        return Conversation.objects.filter(memberships__participant=participant)
+        return get_conversation_model().objects.filter(
+            memberships__participant=participant
+        )
 
-    def session_capabilities(self, participant: Participant) -> dict[str, Any]:
+    def serialize_participant(
+        self, participant: AbstractParticipant, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """A participant as the protocol sends it (4.1): add what a site's
+        model has, under ``ext`` (``{"acme": {...}}``) or ``meta``."""
+        return data
+
+    def serialize_conversation(
+        self, conversation: AbstractConversation, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """A conversation as the protocol sends it (4.2): add what a site's
+        model has (its priority, who it's assigned to…), under ``ext`` or
+        ``meta``."""
+        return data
+
+    def session_capabilities(self, participant: AbstractParticipant) -> dict[str, Any]:
         """``ready.capabilities``: those of every conversation (8.2)."""
         return {}
 
     # Starting conversations ------------------------------------------------
 
     def can_start(
-        self, participant: Participant, others: list[Participant], channel: str
+        self,
+        participant: AbstractParticipant,
+        others: list[AbstractParticipant],
+        channel: str,
     ) -> bool:
         """Whether ``participant`` may start a conversation with ``others``.
         Agents, with anyone; everybody else, only with the support team
@@ -109,10 +139,10 @@ class ChatBackend:
     def start(
         self,
         request: HttpRequest,
-        participant: Participant,
-        others: list[Participant],
+        participant: AbstractParticipant,
+        others: list[AbstractParticipant],
         channel: str,
-    ) -> Conversation:
+    ) -> AbstractConversation:
         """A new conversation. Without ``others`` (the "contact us" widget)
         it goes to ``support_team()`` and waits, ``pending``, for one of them
         to answer."""
@@ -128,7 +158,7 @@ class ChatBackend:
         self.run_hook(self.on_start, request, conversation, participant)
         return conversation
 
-    def support_team(self, channel: str) -> list[Participant]:
+    def support_team(self, channel: str) -> list[AbstractParticipant]:
         """Who receives conversations started without anyone: every active
         staff user. Override it to route them (a queue, a bot first…)."""
         users = get_user_model().objects.filter(is_staff=True, is_active=True)
@@ -175,8 +205,8 @@ class ChatBackend:
     def before_send(
         self,
         request: HttpRequest,
-        conversation: Conversation,
-        participant: Participant,
+        conversation: AbstractConversation,
+        participant: AbstractParticipant,
         parts: list[dict[str, Any]],
     ) -> None:
         """Just before a message is added (its parts checked): what must
@@ -184,7 +214,10 @@ class ChatBackend:
         ``ProtocolError``). Always inline."""
 
     def on_start(
-        self, request: HttpRequest, conversation: Conversation, participant: Participant
+        self,
+        request: HttpRequest,
+        conversation: AbstractConversation,
+        participant: AbstractParticipant,
     ) -> None:
         """After a conversation is started: a greeting, a bot…"""
 
@@ -195,7 +228,7 @@ class ChatBackend:
     def on_action(
         self,
         request: HttpRequest,
-        participant: Participant,
+        participant: AbstractParticipant,
         message: Message,
         button: dict[str, Any],
     ) -> None:
@@ -208,7 +241,10 @@ class ChatBackend:
         )
 
     def validate_parts(
-        self, conversation: Conversation, participant: Participant, parts: list[dict]
+        self,
+        conversation: AbstractConversation,
+        participant: AbstractParticipant,
+        parts: list[dict],
     ) -> None:
         """Raise ``ProtocolError`` for parts ``participant`` can't send. The
         commands already checked the composer and attachments; extension

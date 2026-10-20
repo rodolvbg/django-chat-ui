@@ -20,3 +20,8 @@ LANGUAGE_CODE = "en"
 
 # The library's own backend; tests of the example set theirs.
 CHAT_UI = {"STREAM_TIMEOUT": 0.3, "POLL_INTERVAL": 0.05, "SETTLE": 1.0}
+
+# The library's own models: the example's tickets (helpdesk.Ticket, a
+# model of its own for the conversations) are tested by settings_swapped.
+INSTALLED_APPS = [app for app in INSTALLED_APPS if app != "helpdesk"]  # noqa: F405
+del CHAT_UI_CONVERSATION_MODEL, CHAT_UI_PARTICIPANT_MODEL  # noqa: F821

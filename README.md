@@ -137,6 +137,57 @@ Its hooks: `get_participant`, `conversations`, `can_start`, `start`,
 that takes seconds doesn't hold the message that was sent. For a task
 queue (Celery, `django.tasks`), override `run_hook(hook, *args)`.
 
+### Your own models
+
+Conversations and participants can be a site's own models, with its
+fields: who a conversation is assigned to, its priority, the company of a
+contact. Subclass the abstract ones, and name them in the settings
+**before the first `migrate`** (like `AUTH_USER_MODEL`, they can't be
+swapped afterwards without migrating the data by hand):
+
+```python
+# helpdesk/models.py
+from django_chat_ui.models import AbstractConversation, AbstractParticipant
+
+
+class Ticket(AbstractConversation):
+    priority = models.IntegerField(default=1)
+    assignee = models.ForeignKey(User, null=True, on_delete=models.SET_NULL)
+
+
+class Contact(AbstractParticipant):
+    company = models.CharField(max_length=200, blank=True)
+```
+
+```python
+# settings.py
+CHAT_UI_CONVERSATION_MODEL = "helpdesk.Ticket"
+CHAT_UI_PARTICIPANT_MODEL = "helpdesk.Contact"
+```
+
+Both are optional (each defaults to the package's own). The messages,
+memberships and attachments stay the package's, pointing to them. In code,
+`get_conversation_model()` and `get_participant_model()` (from
+`django_chat_ui.models`) give the models in use;
+`services.create_conversation(..., priority=2)` fills the fields of yours.
+Register them in the admin with `django_chat_ui.admin.ConversationAdmin`
+and `ParticipantAdmin`.
+
+For the interface to get your fields, add them in the backend, under
+`ext` (with your namespace) or `meta`:
+
+```python
+class Backend(ChatBackend):
+    def serialize_conversation(self, conversation, data):
+        data["ext"] = {"helpdesk": {"priority": conversation.priority}}
+        return data
+```
+
+The example does all this (`example/helpdesk`). Fields that don't need a
+column (an id of a CRM, a tag) fit in the `ext` and `meta` JSON fields
+every model already has; and a model of yours with a `OneToOneField` to
+the conversation needs no setting at all.
+
 ### Integrations: `services`
 
 Bots, webhooks and assignment rules change conversations through

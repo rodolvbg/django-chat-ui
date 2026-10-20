@@ -5,7 +5,7 @@ from django.contrib.auth.models import AnonymousUser, User
 from django.test import Client, RequestFactory
 
 from django_chat_ui.backend import SESSION_KEY, ChatBackend, get_backend
-from django_chat_ui.models import Participant
+from django_chat_ui.models import get_participant_model
 
 pytestmark = pytest.mark.django_db
 
@@ -65,7 +65,7 @@ def test_a_visitor_chats_through_the_session(settings, agent):
     )
     me = response.json()[0]["data"]["me"]
     assert me["kind"] == "contact"
-    assert Participant.objects.get(pk=me["id"]).user is None
+    assert get_participant_model().objects.get(pk=me["id"]).user is None
 
 
 class OpenBackend(ChatBackend):

@@ -3,7 +3,9 @@
 import pytest
 
 from django_chat_ui import protocol, services
-from django_chat_ui.models import Event, Membership, Participant
+from django_chat_ui.models import Event, Membership, get_participant_model
+
+Participant = get_participant_model()
 
 pytestmark = pytest.mark.django_db
 
@@ -43,7 +45,7 @@ def test_post_updates_the_lists(agent, customer, conversation, seq):
     assert by[customer]["unread"] == 1
     assert by[customer]["lastMessage"]["id"] == str(message.pk)
     conversation.refresh_from_db()
-    assert conversation.last_message == message
+    assert conversation.last_message["id"] == str(message.pk)
     assert conversation.updated == message.created
 
 

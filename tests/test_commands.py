@@ -6,7 +6,11 @@ import pytest
 
 from django_chat_ui import services
 from django_chat_ui.backend import ChatBackend
-from django_chat_ui.models import Conversation, Message, Participant
+from django_chat_ui.models import Message, get_conversation_model, get_participant_model
+
+#: This package's model, or the example's (tests.settings_swapped).
+Conversation = get_conversation_model()
+Participant = get_participant_model()
 
 pytestmark = pytest.mark.django_db
 
