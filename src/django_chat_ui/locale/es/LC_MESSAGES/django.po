@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-chat-ui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-20 15:39+0200\n"
+"POT-Creation-Date: 2026-10-22 12:20+0000\n"
 "PO-Revision-Date: 2026-10-20 14:10+0200\n"
 "Last-Translator: Rodolfo Becerra\n"
 "Language-Team: Spanish\n"
@@ -12,501 +12,539 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;\n"
+"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? "
+"1 : 2;\n"
 
-#: apps.py
+#: apps.py:7
 msgid "Chat"
 msgstr "Chat"
 
-#: backend.py
+#: backend.py:78
 msgid "Visitor"
 msgstr "Visitante"
 
-#: commands.py
-msgid "Not a frame."
-msgstr "No es un frame."
-
-#: commands.py
-msgid "A command needs an id."
-msgstr "Un comando necesita su id."
-
-#: commands.py
-msgid "Its data must be an object."
-msgstr "Sus datos deben ser un objeto."
-
-#: commands.py
-msgid "There is no such conversation."
-msgstr "No existe esa conversación."
-
-#: commands.py
-msgid "There is no such message."
-msgstr "No existe ese mensaje."
-
-#: commands.py
-msgid "It isn't your message."
-msgstr "No es tu mensaje."
-
-#: commands.py
-msgid "A message needs its parts."
-msgstr "Un mensaje necesita sus partes."
-
-#: commands.py
-msgid "Every part needs its type."
-msgstr "Cada parte necesita su tipo."
-
-#: commands.py
-msgid "This conversation is closed."
-msgstr "Esta conversación está cerrada."
-
-#: commands.py
-msgid "Only templates can be sent now."
-msgstr "Ahora solo se pueden enviar plantillas."
-
-#: commands.py
-msgid "Nothing can be written here now."
-msgstr "Ahora no se puede escribir aquí."
-
-#: commands.py
-msgid "The text is empty."
-msgstr "El texto está vacío."
-
-#: commands.py
-msgid "The text is too long."
-msgstr "El texto es demasiado largo."
-
-#: commands.py
-msgid "A part of an extension needs a fallback."
-msgstr "Una parte de una extensión necesita su fallback."
-
-#: commands.py
-msgid "That can't be sent here."
-msgstr "Eso no se puede enviar aquí."
-
-#: commands.py
-msgid "Files can't be sent here."
-msgstr "Aquí no se pueden enviar archivos."
-
-#: commands.py
-msgid "Upload the file first."
-msgstr "Sube antes el archivo."
-
-#: commands.py
-msgid "This conversation doesn't allow it."
-msgstr "Esta conversación no lo permite."
-
-#: commands.py
-msgid "There is no such template."
-msgstr "No existe esa plantilla."
-
-#: commands.py
-msgid "No version of the protocol in common."
-msgstr "No hay ninguna versión del protocolo en común."
-
-#: commands.py
-msgid "`with` must list participant ids."
-msgstr "`with` debe ser una lista de ids de participantes."
-
-#: commands.py
-msgid "There is no such participant."
-msgstr "No existe ese participante."
-
-#: commands.py
-msgid "That isn't a channel."
-msgstr "Eso no es un canal."
-
-#: commands.py
-msgid "You can't start that conversation."
-msgstr "No puedes empezar esa conversación."
-
-#: commands.py
-msgid "A message needs its clientId."
-msgstr "Un mensaje necesita su clientId."
-
-#: commands.py
-msgid "That message was deleted."
-msgstr "Ese mensaje se borró."
-
-#: commands.py
-msgid "That isn't an emoji."
-msgstr "Eso no es un emoji."
-
-#: commands.py
-msgid "That reaction isn't allowed here."
-msgstr "Esa reacción no se permite aquí."
-
-#: commands.py
-msgid "There is no such button."
-msgstr "No existe ese botón."
-
-#: models.py
+#: models.py:70
 msgid "user"
 msgstr "usuario"
 
-#: models.py
+#: models.py:73
 msgid "kind"
 msgstr "tipo"
 
-#: models.py
+#: models.py:76
 msgid "user, agent, bot, contact, system, or an extension's."
 msgstr "user, agent, bot, contact, system, o el de una extensión."
 
-#: models.py
+#: models.py:78 models.py:403
 msgid "name"
 msgstr "nombre"
 
-#: models.py
+#: models.py:79
 msgid "avatar"
 msgstr "avatar"
 
-#: models.py
+#: models.py:81
 msgid "handle"
 msgstr "identificador"
 
-#: models.py
+#: models.py:84
 msgid "How the channel knows them: a phone number, an email…"
 msgstr "Cómo lo conoce el canal: un teléfono, un email…"
 
-#: models.py
+#: models.py:88 models.py:133 models.py:229 models.py:406
 msgid "created"
 msgstr "creado"
 
-#: models.py
+#: models.py:97
 msgid "participant"
 msgstr "participante"
 
-#: models.py
+#: models.py:98
 msgid "participants"
 msgstr "participantes"
 
-#: models.py
+#: models.py:121
 msgid "channel"
 msgstr "canal"
 
-#: models.py
+#: models.py:122
 msgid "title"
 msgstr "título"
 
-#: models.py
+#: models.py:124
 msgid "state"
 msgstr "estado"
 
-#: models.py
+#: models.py:127
 msgid "open, pending, closed, or an extension's."
 msgstr "open, pending, closed, o el de una extensión."
 
-#: models.py
+#: models.py:129
 msgid "capabilities"
 msgstr "capacidades"
 
-#: models.py
-msgid "last message"
-msgstr "último mensaje"
-
-#: models.py
+#: models.py:134
 msgid "updated"
 msgstr "actualizado"
 
-#: models.py
+#: models.py:144
 msgid "conversation"
 msgstr "conversación"
 
-#: models.py
+#: models.py:145
 msgid "conversations"
 msgstr "conversaciones"
 
-#: models.py
+#: models.py:181
 msgid "unread"
 msgstr "sin leer"
 
-#: models.py
+#: models.py:188
 msgid "read until"
 msgstr "leído hasta"
 
-#: models.py
+#: models.py:190
 msgid "joined"
 msgstr "se unió"
 
-#: models.py
+#: models.py:193
 msgid "membership"
 msgstr "participación"
 
-#: models.py
+#: models.py:194
 msgid "memberships"
 msgstr "participaciones"
 
-#: models.py
-msgid "author"
-msgstr "autor"
+#: models.py:222
+msgid "sender"
+msgstr "remitente"
 
-#: models.py
-msgid "client id"
-msgstr "id del cliente"
-
-#: models.py
-msgid "parts"
-msgstr "partes"
-
-#: models.py
-msgid "status"
-msgstr "estado"
-
-#: models.py
-msgid "error"
-msgstr "error"
-
-#: models.py
-msgid "reply to"
-msgstr "en respuesta a"
-
-#: models.py
-msgid "edited"
-msgstr "editado"
-
-#: models.py
-msgid "deleted"
-msgstr "borrado"
-
-#: models.py
-msgid "streaming"
-msgstr "escribiéndose"
-
-#: models.py
-msgid "reactions"
-msgstr "reacciones"
-
-#: models.py
-msgid "message"
-msgstr "mensaje"
-
-#: models.py
-msgid "messages"
-msgstr "mensajes"
-
-#: models.py
-msgid "file"
-msgstr "archivo"
-
-#: models.py
+#: models.py:224 models.py:404
 msgid "type"
 msgstr "tipo"
 
-#: models.py
-msgid "size"
-msgstr "tamaño"
+#: models.py:225
+msgid "state key"
+msgstr "clave de estado"
 
-#: models.py
-msgid "attachment"
-msgstr "adjunto"
+#: models.py:226
+msgid "content"
+msgstr "contenido"
 
-#: models.py
-msgid "attachments"
-msgstr "adjuntos"
+#: models.py:230
+msgid "transaction id"
+msgstr "id de transacción"
 
-#: models.py
+#: models.py:247
 msgid "event"
 msgstr "evento"
 
-#: models.py
+#: models.py:248
 msgid "events"
 msgstr "eventos"
 
-#: texts.py
+#: models.py:370
+msgid "stream entry"
+msgstr "entrada del flujo"
+
+#: models.py:371
+msgid "stream entries"
+msgstr "entradas del flujo"
+
+#: models.py:402
+msgid "file"
+msgstr "archivo"
+
+#: models.py:405
+msgid "size"
+msgstr "tamaño"
+
+#: models.py:409 models.py:410
+msgid "media"
+msgstr "archivos"
+
+#: models.py:431
+msgid "access token"
+msgstr "token de acceso"
+
+#: models.py:432
+msgid "access tokens"
+msgstr "tokens de acceso"
+
+#: rules.py:50
+msgid "This conversation doesn't allow it."
+msgstr "Esta conversación no lo permite."
+
+#: rules.py:66
+msgid "There is no such event."
+msgstr "No existe ese evento."
+
+#: rules.py:90
+msgid "The content must be an object."
+msgstr "El contenido debe ser un objeto."
+
+#: rules.py:92
+msgid "This conversation is closed."
+msgstr "Esta conversación está cerrada."
+
+#: rules.py:102
+msgid "Events of this type can't be sent here."
+msgstr "Aquí no se pueden enviar eventos de este tipo."
+
+#: rules.py:111
+msgid "m.relates_to must be an object."
+msgstr "m.relates_to debe ser un objeto."
+
+#: rules.py:134
+msgid "A message needs its msgtype."
+msgstr "Un mensaje necesita su msgtype."
+
+#: rules.py:139
+msgid "Only templates can be sent now."
+msgstr "Ahora solo se pueden enviar plantillas."
+
+#: rules.py:142
+msgid "Nothing can be written here now."
+msgstr "Ahora no se puede escribir aquí."
+
+#: rules.py:160
+msgid "That can't be sent here."
+msgstr "Eso no se puede enviar aquí."
+
+#: rules.py:170
+msgid "The text is empty."
+msgstr "El texto está vacío."
+
+#: rules.py:173
+msgid "The text is too long."
+msgstr "El texto es demasiado largo."
+
+#: rules.py:197
+msgid "Upload the file first."
+msgstr "Sube antes el archivo."
+
+#: rules.py:200
+msgid "Files of this type can't be sent here."
+msgstr "Aquí no se pueden enviar archivos de este tipo."
+
+#: rules.py:203 views.py:641 views.py:644
+msgid "The file is too big."
+msgstr "El archivo es demasiado grande."
+
+#: rules.py:228
+msgid "There is no such template."
+msgstr "No existe esa plantilla."
+
+#: rules.py:258
+msgid "There is no such button."
+msgstr "No existe ese botón."
+
+#: rules.py:274
+msgid "It isn't your message."
+msgstr "No es tu mensaje."
+
+#: rules.py:276
+msgid "That message was deleted."
+msgstr "Ese mensaje se borró."
+
+#: rules.py:279
+msgid "An edit needs its new content."
+msgstr "Una edición necesita su nuevo contenido."
+
+#: rules.py:294
+msgid "A reaction annotates an event."
+msgstr "Una reacción anota un evento."
+
+#: rules.py:297
+msgid "That isn't an emoji."
+msgstr "Eso no es un emoji."
+
+#: rules.py:300
+msgid "That reaction isn't allowed here."
+msgstr "Esa reacción no se permite aquí."
+
+#: rules.py:303
+msgid "That message can't be reacted to."
+msgstr "No se puede reaccionar a ese mensaje."
+
+#: rules.py:308
+msgid "You reacted with it already."
+msgstr "Ya reaccionaste con eso."
+
+#: rules.py:323 rules.py:327
+msgid "It isn't yours to delete."
+msgstr "No te corresponde borrarlo."
+
+#: texts.py:14
 msgctxt "chat"
 msgid "Write a message…"
 msgstr "Escribe un mensaje…"
 
-#: texts.py
+#: texts.py:15
 msgctxt "chat"
 msgid "Send"
 msgstr "Enviar"
 
-#: texts.py
+#: texts.py:16
 msgctxt "chat"
 msgid "Attach"
 msgstr "Adjuntar"
 
-#: texts.py
+#: texts.py:17
 msgctxt "chat"
 msgid "Retry"
 msgstr "Reintentar"
 
-#: texts.py
+#: texts.py:18
 msgctxt "chat"
 msgid "Not sent"
 msgstr "No enviado"
 
-#: texts.py
+#: texts.py:19
 msgctxt "chat"
 msgid "edited"
 msgstr "editado"
 
-#: texts.py
+#: texts.py:20
 msgctxt "chat"
 msgid "Load earlier messages"
 msgstr "Cargar mensajes anteriores"
 
-#: texts.py
+#: texts.py:21
 #, python-format
 msgctxt "chat"
 msgid "%(name)s is typing…"
 msgstr "%(name)s está escribiendo…"
 
-#: texts.py
+#: texts.py:22
 msgctxt "chat"
 msgid "Several people are typing…"
 msgstr "Varias personas están escribiendo…"
 
-#: texts.py
+#: texts.py:23
 msgctxt "chat"
 msgid "Choose one of the options above."
 msgstr "Elige una de las opciones de arriba."
 
-#: texts.py
+#: texts.py:24
 msgctxt "chat"
 msgid "This conversation is closed."
 msgstr "Esta conversación está cerrada."
 
-#: texts.py
+#: texts.py:25
 msgctxt "chat"
 msgid "Template"
 msgstr "Plantilla"
 
-#: texts.py
+#: texts.py:26
 msgctxt "chat"
 msgid "Send template"
 msgstr "Enviar plantilla"
 
-#: texts.py
+#: texts.py:27
 msgctxt "chat"
 msgid "This content can't be shown here."
 msgstr "Este contenido no se puede mostrar aquí."
 
-#: texts.py
+#: texts.py:28
 msgctxt "chat"
 msgid "Sending"
 msgstr "Enviando"
 
-#: texts.py
+#: texts.py:29
 msgctxt "chat"
 msgid "Sent"
 msgstr "Enviado"
 
-#: texts.py
+#: texts.py:30
 msgctxt "chat"
 msgid "Delivered"
 msgstr "Entregado"
 
-#: texts.py
+#: texts.py:31
 msgctxt "chat"
 msgid "Read"
 msgstr "Leído"
 
-#: texts.py
+#: texts.py:32
 msgctxt "chat"
 msgid "Messages"
 msgstr "Mensajes"
 
-#: texts.py
+#: texts.py:33
 msgctxt "chat"
 msgid "React"
 msgstr "Reaccionar"
 
-#: texts.py
+#: texts.py:34 texts.py:50
 msgctxt "chat"
 msgid "You"
 msgstr "Tú"
 
-#: texts.py
+#: texts.py:35
+msgctxt "chat"
+msgid "Message deleted"
+msgstr "Mensaje borrado"
+
+#: texts.py:39
 msgctxt "chat"
 msgid "Search conversations"
 msgstr "Buscar conversaciones"
 
-#: texts.py
+#: texts.py:40
 msgctxt "chat"
 msgid "No conversations yet."
 msgstr "Aún no hay conversaciones."
 
-#: texts.py
+#: texts.py:41
 msgctxt "chat"
 msgid "No conversation matches."
 msgstr "Ninguna conversación coincide."
 
-#: texts.py
+#: texts.py:42
 msgctxt "chat"
 msgid "Back to conversations"
 msgstr "Volver a las conversaciones"
 
-#: texts.py
+#: texts.py:43 texts.py:57
 #, python-format
 msgctxt "chat"
 msgid "%(count)s unread"
 msgstr "%(count)s sin leer"
 
-#: texts.py
+#: texts.py:44
 msgctxt "chat"
 msgid "Pick a conversation."
 msgstr "Elige una conversación."
 
-#: texts.py
+#: texts.py:45
 msgctxt "chat"
 msgid "Photo"
 msgstr "Foto"
 
-#: texts.py
+#: texts.py:46
 msgctxt "chat"
 msgid "Video"
 msgstr "Vídeo"
 
-#: texts.py
+#: texts.py:47
 msgctxt "chat"
 msgid "Audio"
 msgstr "Audio"
 
-#: texts.py
+#: texts.py:48
 msgctxt "chat"
 msgid "Voice message"
 msgstr "Mensaje de voz"
 
-#: texts.py
+#: texts.py:49
 msgctxt "chat"
 msgid "Location"
 msgstr "Ubicación"
 
-#: texts.py
+#: texts.py:54
 msgctxt "chat"
 msgid "Chat with us"
 msgstr "Escríbenos"
 
-#: texts.py
+#: texts.py:55
 msgctxt "chat"
 msgid "Close the chat"
 msgstr "Cerrar el chat"
 
-#: texts.py
+#: texts.py:56
 msgctxt "chat"
 msgid "Chat"
 msgstr "Chat"
 
-#: views.py
+#: views.py:112
+msgid "Log in again."
+msgstr "Vuelve a iniciar sesión."
+
+#: views.py:116
 msgid "Log in to chat."
 msgstr "Inicia sesión para chatear."
 
-#: views.py
+#: views.py:118
+msgid "The CSRF token is missing or wrong."
+msgstr "Falta el token CSRF o no es correcto."
+
+#: views.py:137
 msgid "The body isn't JSON."
 msgstr "El cuerpo no es JSON."
 
-#: views.py
-msgid "Too many commands at once."
-msgstr "Demasiados comandos a la vez."
+#: views.py:139
+msgid "The body must be an object."
+msgstr "El cuerpo debe ser un objeto."
 
-#: views.py
-msgid "Send a file, for a conversation."
-msgstr "Envía un archivo, para una conversación."
+#: views.py:152
+msgid "You aren't in this room."
+msgstr "No estás en esta sala."
 
-#: views.py
-msgid "Files of this type can't be sent here."
-msgstr "Aquí no se pueden enviar archivos de este tipo."
+#: views.py:158
+msgid "That isn't you."
+msgstr "Ese no eres tú."
 
-#: views.py
-msgid "The file is too big."
-msgstr "El archivo es demasiado grande."
+#: views.py:179 views.py:194 views.py:393
+msgid "Unrecognized request."
+msgstr "Petición no reconocida."
+
+#: views.py:212
+msgid "Only passwords can log in."
+msgstr "Solo se puede iniciar sesión con contraseña."
+
+#: views.py:217
+msgid "A user and their password, please."
+msgstr "Un usuario y su contraseña, por favor."
+
+#: views.py:226
+msgid "Wrong user or password."
+msgstr "Usuario o contraseña incorrectos."
+
+#: views.py:304
+msgid "There is no such filter."
+msgstr "No existe ese filtro."
+
+#: views.py:328
+msgid "There is no such data."
+msgstr "No existen esos datos."
+
+#: views.py:360
+msgid "There is no such user."
+msgstr "No existe ese usuario."
+
+#: views.py:364
+msgid "They have no such field."
+msgstr "No tiene ese campo."
+
+#: views.py:422
+msgid "invite must list user IDs."
+msgstr "invite debe listar IDs de usuario."
+
+#: views.py:425 views.py:428
+msgid "There is no such participant."
+msgstr "No existe ese participante."
+
+#: views.py:434
+msgid "That isn't a channel."
+msgstr "Eso no es un canal."
+
+#: views.py:436
+msgid "You can't start that conversation."
+msgstr "No puedes empezar esa conversación."
+
+#: views.py:527
+msgid "The state of this room is the server's."
+msgstr "El estado de esta sala es cosa del servidor."
+
+#: views.py:534
+msgid "There is no such state."
+msgstr "No existe ese estado."
+
+#: views.py:599
+msgid "Unknown receipt type."
+msgstr "Tipo de recibo desconocido."
+
+#: views.py:671
+msgid "There is no such file."
+msgstr "No existe ese archivo."

@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from playwright.sync_api import Browser
 
@@ -5,7 +7,9 @@ from playwright.sync_api import Browser
 @pytest.fixture
 def new_page(browser: Browser):
     """Pages of their own contexts (their own cookies), closed after the
-    test: an open page keeps its chat's stream connecting to the server."""
+    test: an open page keeps syncing. A long poll under way only ends when
+    it times out (SYNC_TIMEOUT): it's waited for, not to read the database
+    once the test is over."""
     contexts = []
 
     def new(**options):
@@ -16,3 +20,5 @@ def new_page(browser: Browser):
     yield new
     for context in contexts:
         context.close()
+    if contexts:
+        time.sleep(0.7)

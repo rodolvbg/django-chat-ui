@@ -3,9 +3,13 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
 
-def context(request: HttpRequest) -> dict[str, str]:
-    # ?transport=polling or ?transport=websocket (under ASGI) to try them.
-    return {"transport": request.GET.get("transport", "sse")}
+def context(request: HttpRequest) -> dict[str, int]:
+    # ?poll=3000 to poll every 3 seconds instead of long polling.
+    try:
+        poll = int(request.GET.get("poll", 0))
+    except ValueError:
+        poll = 0
+    return {"poll": poll}
 
 
 def home(request: HttpRequest) -> HttpResponse:

@@ -14,11 +14,9 @@ pytestmark = pytest.mark.django_db(transaction=True)
 def demo(settings):
     settings.CHAT_UI = {
         "BACKEND": "shop.chat.DemoBackend",
-        # Short streams: none outlives its test (and its database).
-        "STREAM_TIMEOUT": 2,
-        "KEEPALIVE": 0.5,
+        # Short long polls: none outlives its test (and its database).
+        "SYNC_TIMEOUT": 0.5,
         "POLL_INTERVAL": 0.1,
-        "RETRY": 200,
     }
 
 

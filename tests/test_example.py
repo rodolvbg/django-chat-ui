@@ -2,7 +2,8 @@
 
 import pytest
 
-from django_chat_ui import services
+from django_chat_ui import content, services
+from django_chat_ui.matrix import room_id
 from django_chat_ui.models import get_conversation_model, get_participant_model
 
 #: This package's model, or the example's (tests.settings_swapped).
@@ -22,78 +23,61 @@ def demo(settings, monkeypatch):
 
 
 def texts(conversation):
-    return [
-        " / ".join(p.get("text", p.get("fallback", "")) for p in m.parts)
-        for m in conversation.messages.all()
-    ]
+    return [m.body for m in conversation.messages.filter(redacted_by=None)]
+
+
+def start(client):
+    """A visitor opens the widget: the room it starts."""
+    from tests.conftest import Api
+
+    api = Api(client)
+    api.ok("GET", "/account/whoami")
+    room = api.ok("POST", "/createRoom", {})["room_id"]
+    return api, room, Conversation.objects.get(pk=room[1:].split(":")[0])
 
 
 def test_a_visitor_is_greeted_and_answered(client, agent):
-    from tests.conftest import Chat
+    from django_chat_ui.matrix import ACTION, BUTTONS
 
-    chat = Chat(client)
-    me = chat.hello()["me"]
-    assert me["kind"] == "contact"
-
-    frames = chat.ok("conversation.open", {"with": [], "channel": "web"})
-    conversation = Conversation.objects.get(pk=frames[-1]["data"]["conversation"])
-    assert conversation.capabilities["streaming"] is True
+    api, room, conversation = start(client)
+    assert conversation.capabilities["buttons"] is True
     assert {p.kind for p in conversation.participants.all()} == {
         "contact",
         "agent",
         "bot",
     }
     greeting = conversation.messages.get()
-    assert greeting.parts[1]["buttons"][0] == {"id": "order", "label": "My order"}
+    assert greeting.content[BUTTONS]["buttons"][0] == {
+        "id": "order",
+        "label": "My order",
+    }
 
-    chat.ok(
-        "action",
+    api.sent(
+        room,
         {
-            "conversation": str(conversation.pk),
-            "message": str(greeting.pk),
-            "button": "order",
+            "msgtype": "m.text",
+            "body": "x",
+            ACTION: {"event_id": greeting.event_id, "button": "order"},
         },
     )
     assert texts(conversation)[1:] == [
         "My order",
-        "Your order **A-1029** ships today with UPS.",
+        "Your order A-1029 ships today with UPS.",
     ]
 
-    chat.ok(
-        "message.send",
-        {
-            "conversation": str(conversation.pk),
-            "clientId": "c1",
-            "parts": [{"type": "text", "text": "And in size M?"}],
-        },
-    )
+    api.sent(room, {"msgtype": "m.text", "body": "And in size M?"})
     assert texts(conversation)[-1] == "Thanks. Someone will answer you shortly."
 
 
-def test_the_staff_takes_over(agent_chat, agent, customer):
-    conversation = services.create_conversation(
-        [agent, customer], state="pending", capabilities={"composer": {"mode": "free"}}
-    )
-    agent_chat.ok(
-        "message.send",
-        {
-            "conversation": str(conversation.pk),
-            "clientId": "c1",
-            "parts": [{"type": "text", "text": "Hi"}],
-        },
-    )
+def test_the_staff_takes_over(agent_api, agent, customer):
+    conversation = services.create_conversation([agent, customer], state="pending")
+    room = room_id(conversation)
+    agent_api.sent(room, {"msgtype": "m.text", "body": "Hi"})
     conversation.refresh_from_db()
     assert conversation.state == "open"
     assert texts(conversation) == ["Rodolfo joined", "Hi"]
     # Once open, nobody joins again, and the assistant stays quiet.
-    agent_chat.ok(
-        "message.send",
-        {
-            "conversation": str(conversation.pk),
-            "clientId": "c2",
-            "parts": [{"type": "text", "text": "Anything else?"}],
-        },
-    )
+    agent_api.sent(room, {"msgtype": "m.text", "body": "Anything else?"})
     assert len(texts(conversation)) == 3
 
 
@@ -173,27 +157,19 @@ def claude(monkeypatch):
 
 
 def visitor_writes(client, text):
-    from tests.conftest import Chat
-
-    chat = Chat(client)
-    chat.hello()
-    frames = chat.ok("conversation.open", {"with": [], "channel": "web"})
-    conversation = Conversation.objects.get(pk=frames[-1]["data"]["conversation"])
-    chat.ok(
-        "message.send",
-        {
-            "conversation": str(conversation.pk),
-            "clientId": "c1",
-            "parts": [{"type": "text", "text": text}],
-        },
-    )
-    return chat, conversation
+    api, room, conversation = start(client)
+    api.sent(room, {"msgtype": "m.text", "body": text})
+    return api, conversation
 
 
 def test_the_assistant_answers_with_claude(client, agent, claude):
     _, conversation = visitor_writes(client, "Do you ship to Hawaii?")
 
-    assert texts(conversation)[-1] == "We ship to **Hawaii**, yes."
+    assert texts(conversation)[-1] == "We ship to Hawaii, yes."
+    assert (
+        "<strong>Hawaii</strong>"
+        in conversation.messages.last().content["formatted_body"]
+    )
     [call] = claude.calls
     assert call["model"] == "claude-opus-5-5"
     assert "T-shirts" in call["system"]
@@ -206,14 +182,16 @@ def test_the_history_the_model_gets(agent, customer):
 
     conversation = services.create_conversation([agent, customer])
     bot = assistant()
-    services.post(conversation, bot, [{"type": "text", "text": "Hi!"}])
-    services.post(conversation, customer, [{"type": "text", "text": "Hello"}])
-    services.post(
-        conversation, customer, [{"type": "image", "url": "/x", "fallback": "a photo"}]
+    services.send(conversation, bot, content.text("Hi!"))
+    services.send(conversation, customer, content.text("Hello"))
+    services.send(
+        conversation, customer, content.image("mxc://localhost/x", body="a photo")
     )
-    services.post(conversation, None, [{"type": "system", "text": "Rodolfo joined"}])
-    services.post(conversation, bot, [{"type": "buttons", "buttons": []}])
-    services.post(conversation, agent, [{"type": "text", "text": "I'm here"}])
+    services.system(conversation, "Rodolfo joined")
+    services.send(conversation, bot, {"msgtype": "m.text", "body": " "})
+    gone = services.send(conversation, customer, content.text("Oops"))
+    services.redact(gone)
+    services.send(conversation, agent, content.text("I'm here"))
     assert history(conversation) == [
         {"role": "user", "content": "Hello\na photo\nI'm here"},
     ]
@@ -223,7 +201,7 @@ def test_the_assistant_says_sorry_when_claude_fails(client, agent, claude):
     claude.next_stream = FakeStream(["We "], error=claude.APIError("overloaded"))
     _, conversation = visitor_writes(client, "Hi?")
     assert texts(conversation)[-2:] == [
-        "We ",  # what came before it failed, finished
+        "We",  # what came before it failed, sent
         "Sorry, I can't answer now: someone will shortly.",
     ]
 
@@ -244,30 +222,20 @@ def test_without_a_key_or_the_sdk(client, agent, monkeypatch, claude):
 
 
 def test_after_asking_for_someone_no_ai(client, agent, claude):
-    from tests.conftest import Chat
+    from django_chat_ui.matrix import ACTION
 
-    chat = Chat(client)
-    chat.hello()
-    frames = chat.ok("conversation.open", {"with": [], "channel": "web"})
-    conversation = Conversation.objects.get(pk=frames[-1]["data"]["conversation"])
+    api, room, conversation = start(client)
     menu = conversation.messages.get()
-    chat.ok(
-        "action",
+    api.sent(
+        room,
         {
-            "conversation": str(conversation.pk),
-            "message": str(menu.pk),
-            "button": "human",
+            "msgtype": "m.text",
+            "body": "x",
+            ACTION: {"event_id": menu.event_id, "button": "human"},
         },
     )
     conversation.refresh_from_db()
     assert conversation.meta == {"human": True}
-    chat.ok(
-        "message.send",
-        {
-            "conversation": str(conversation.pk),
-            "clientId": "c1",
-            "parts": [{"type": "text", "text": "Hi?"}],
-        },
-    )
+    api.sent(room, {"msgtype": "m.text", "body": "Hi?"})
     assert texts(conversation)[-1] == "Thanks. Someone will answer you shortly."
     assert claude.calls == []

@@ -1,228 +1,466 @@
 import { describe, expect, it, vi } from "vitest";
-import { ConversationStore } from "../../src/django_chat_ui/static/django_chat_ui/store.js";
+import {
+    ACTION,
+    CAPABILITIES,
+    CONVERSATION,
+    DELIVERED,
+    PARTICIPANT,
+    STATUS,
+    STREAM,
+} from "../../src/django_chat_ui/static/django_chat_ui/matrix.js";
+import { RoomStore } from "../../src/django_chat_ui/static/django_chat_ui/store.js";
 
-const at = (minute) => `2026-10-20T10:${String(minute).padStart(2, "0")}:00Z`;
+let ids = 0;
 
-function message(id, minute, extra = {}) {
+function message(sender, body, extra = {}) {
+    ids += 1;
     return {
-        id,
-        conversation: "c1",
-        author: "p_a",
-        parts: [{ type: "text", text: id }],
-        createdAt: at(minute),
+        type: "m.room.message",
+        event_id: `$${ids}`,
+        sender,
+        origin_server_ts: ids,
+        content: { msgtype: "m.text", body },
         ...extra,
     };
 }
 
-describe("ConversationStore", () => {
-    it("keeps the conversation, merging partial updates", () => {
-        const store = new ConversationStore("c1");
-        store.apply({
-            type: "conversation.created",
-            data: {
-                id: "c1",
-                title: "Ana",
-                capabilities: { receipts: true, composer: { mode: "free" } },
+function state(type, key, content) {
+    ids += 1;
+    return { type, state_key: key, event_id: `$${ids}`, content };
+}
+
+function reaction(sender, target, key, extra = {}) {
+    ids += 1;
+    return {
+        type: "m.reaction",
+        event_id: `$${ids}`,
+        sender,
+        content: {
+            "m.relates_to": { rel_type: "m.annotation", event_id: target, key },
+        },
+        ...extra,
+    };
+}
+
+describe("RoomStore", () => {
+    it("takes a room of /sync: its state, timeline, unread", () => {
+        const store = new RoomStore("!r");
+        const changed = vi.fn();
+        store.addEventListener("change", changed);
+        store.applySync({
+            state: {
+                events: [
+                    state("m.room.name", "", { name: "Ana" }),
+                    state(CONVERSATION, "", {
+                        channel: "whatsapp",
+                        state: "open",
+                    }),
+                    state(CAPABILITIES, "", { typing: true }),
+                    state("m.room.member", "@a", {
+                        membership: "join",
+                        displayname: "Ana",
+                        [PARTICIPANT]: { kind: "contact", handle: "+1" },
+                    }),
+                    state("m.room.member", "@b", { membership: "leave" }),
+                    state("m.room.member", "@c", { membership: "join" }),
+                    { type: "m.room.message", content: {} }, // Not state.
+                ],
             },
+            timeline: { events: [message("@a", "Hi")], prev_batch: "t5" },
+            unread_notifications: { notification_count: 2 },
         });
-        store.apply({
-            type: "conversation.updated",
-            data: {
-                id: "c1",
-                capabilities: { composer: { mode: "templates" } },
-            },
+        expect(changed).toHaveBeenCalledOnce();
+        expect(store.joined).toBe(true);
+        expect(store.more).toBe(true);
+        expect(store.prevBatch).toBe("t5");
+        expect(store.unread).toBe(2);
+        expect(store.conversation).toEqual({
+            id: "!r",
+            title: "Ana",
+            channel: "whatsapp",
+            state: "open",
+            ext: undefined,
+            capabilities: { typing: true },
+            participants: [
+                {
+                    id: "@a",
+                    name: "Ana",
+                    kind: "contact",
+                    handle: "+1",
+                    avatar: undefined,
+                    ext: undefined,
+                },
+                {
+                    id: "@c",
+                    name: "",
+                    kind: "user",
+                    handle: undefined,
+                    avatar: undefined,
+                    ext: undefined,
+                },
+            ],
+            unread: 2,
         });
-
-        expect(store.conversation.title).toBe("Ana");
-        expect(store.conversation.capabilities).toEqual({
-            receipts: true,
-            composer: { mode: "templates" },
-        });
-        expect(store.conversation.capabilities.composer).toEqual({
-            mode: "templates",
-        });
+        // Later syncs keep where older events start; an empty one changes
+        // nothing but says so.
+        store.applySync({});
+        expect(store.prevBatch).toBe("t5");
+        expect(new RoomStore("!x").conversation.capabilities).toEqual({});
     });
 
-    it("ignores other conversations and unknown events", () => {
-        const store = new ConversationStore("c1");
-        const change = vi.fn();
-        store.addEventListener("change", change);
-
-        expect(
-            store.apply({ type: "conversation.updated", data: { id: "c2" } }),
-        ).toBe(false);
-        expect(
-            store.apply({ type: "conversation.created", data: { id: "c2" } }),
-        ).toBe(false);
-        expect(
-            store.apply({
-                type: "message.created",
-                data: { ...message("m", 1), conversation: "c2" },
-            }),
-        ).toBe(false);
-        for (const type of [
-            "message.updated",
-            "message.delta",
-            "typing",
-            "read",
-            "history",
-        ]) {
-            expect(store.apply({ type, data: { conversation: "c2" } })).toBe(
-                false,
-            );
-        }
-        expect(store.apply({ type: "acme.order.shipped", data: {} })).toBe(
-            false,
-        );
-        expect(
-            store.apply({
-                type: "message.updated",
-                data: { conversation: "c1", id: "nope" },
-            }),
-        ).toBe(false);
-        expect(
-            store.apply({
-                type: "message.delta",
-                data: { conversation: "c1", id: "nope" },
-            }),
-        ).toBe(false);
-        expect(store.apply({ type: "typing" })).toBe(false);
-        expect(change).not.toHaveBeenCalled();
-    });
-
-    it("orders messages by time and skips replayed ones", () => {
-        const store = new ConversationStore("c1");
-        store.apply({ type: "message.created", data: message("b", 2) });
-        store.apply({ type: "message.created", data: message("a", 1) });
-        store.apply({ type: "message.created", data: message("c", 2) });
-        store.apply({ type: "message.created", data: message("a", 1) });
-
-        expect(store.messages.map((m) => m.id)).toEqual(["a", "b", "c"]);
-    });
-
-    it("matches the server's copy of an optimistic message", () => {
-        const store = new ConversationStore("c1");
-        store.addPending(message("c_1", 5, { clientId: "c_1" }));
-        expect(store.messages[0].status).toBe("sending");
-        store.fail("c_1", { message: "offline" });
-        expect(store.messages[0].status).toBe("failed");
-        store.fail("unknown", {});
-
-        store.apply({
-            type: "message.created",
-            data: message("m_9", 6, { clientId: "c_1", status: "sent" }),
+    it("starts over after a gap, keeping what it's sending", () => {
+        const store = new RoomStore("!r");
+        store.applySync({ timeline: { events: [message("@a", "old")] } });
+        store.addLocal({
+            event_id: "~t1",
+            txnId: "t1",
+            type: "m.room.message",
+            content: { body: "mine" },
         });
-
-        expect(store.messages).toHaveLength(1);
-        expect(store.messages[0]).toMatchObject({ id: "m_9", status: "sent" });
-        expect(store.messages[0].error).toBeUndefined();
-    });
-
-    it("puts the server's copy at the server's time", () => {
-        // Sent at 10:05 by the client's clock; the server, before adding
-        // it at 10:07, added "Rodolfo joined" at 10:06 (and that came first).
-        const store = new ConversationStore("c1");
-        store.addPending(message("c_1", 5, { clientId: "c_1" }));
-        store.apply({ type: "message.created", data: message("joined", 6) });
-        expect(store.messages.map((m) => m.id)).toEqual(["c_1", "joined"]);
-
-        store.apply({
-            type: "message.created",
-            data: message("m_9", 7, { clientId: "c_1" }),
+        store.applySync({
+            timeline: { events: [message("@a", "new")], limited: true },
         });
-        expect(store.messages.map((m) => m.id)).toEqual(["joined", "m_9"]);
-    });
-
-    it("updates messages, and streams text into them", () => {
-        const store = new ConversationStore("c1");
-        store.apply({
-            type: "message.created",
-            data: message("m", 1, { parts: [], streaming: true }),
-        });
-        store.apply({
-            type: "message.delta",
-            data: { conversation: "c1", id: "m", part: 0, text: "Hel" },
-        });
-        store.apply({
-            type: "message.delta",
-            data: { conversation: "c1", id: "m", part: 0, text: "lo" },
-        });
-        expect(store.find("m").parts).toEqual([
-            { type: "text", text: "Hello" },
+        expect(store.messages.map((m) => m.content.body)).toEqual([
+            "new",
+            "mine",
         ]);
-
-        store.apply({
-            type: "message.updated",
-            data: {
-                conversation: "c1",
-                id: "m",
-                streaming: false,
-                status: "read",
-            },
+        expect(store.more).toBe(false);
+        store.applySync({
+            timeline: { events: [], limited: true, prev_batch: "t1" },
         });
-        expect(store.find("m")).toMatchObject({
-            streaming: false,
-            status: "read",
-        });
-
-        store.find("m").parts.push({ type: "image", url: "https://x/i.png" });
-        expect(
-            store.apply({
-                type: "message.delta",
-                data: { conversation: "c1", id: "m", part: 1, text: "x" },
-            }),
-        ).toBe(false);
+        expect(store.more).toBe(true);
     });
 
-    it("follows typing and reading", () => {
-        const store = new ConversationStore("c1");
-        store.apply({
-            type: "typing",
-            data: { conversation: "c1", participant: "p_a", active: true },
+    it("puts the server's events before its own pending ones, once", () => {
+        const store = new RoomStore("!r");
+        store.addLocal({
+            event_id: "~t1",
+            txnId: "t1",
+            type: "m.room.message",
+            content: { body: "mine" },
         });
-        expect([...store.typing]).toEqual(["p_a"]);
-        store.apply({
-            type: "typing",
-            data: { conversation: "c1", participant: "p_a", active: false },
+        const theirs = message("@a", "theirs");
+        store.applySync({ timeline: { events: [theirs, theirs] } });
+        expect(store.messages.map((m) => m.content.body)).toEqual([
+            "theirs",
+            "mine",
+        ]);
+        expect(store.messages[1].status).toBe("sending");
+        // Its echo, by its transaction.
+        const echo = message("@me", "mine", {
+            unsigned: { transaction_id: "t1" },
         });
+        store.applySync({ timeline: { events: [echo] } });
+        expect(store.events.filter((e) => e.local)).toEqual([]);
+        expect(store.messages.map((m) => m.id)).toEqual([
+            theirs.event_id,
+            echo.event_id,
+        ]);
+    });
+
+    it("confirms its own events, or marks them failed", () => {
+        const store = new RoomStore("!r");
+        store.addLocal({
+            event_id: "~t1",
+            txnId: "t1",
+            type: "m.room.message",
+            sender: "@me",
+            content: { body: "a" },
+        });
+        store.confirm("t1", "$100");
+        expect(store.messages[0]).toMatchObject({
+            id: "~t1",
+            status: "sent",
+            txnId: "t1",
+        });
+        // Its echo, by its event ID (another device's sync has no txn).
+        store.applySync({
+            timeline: { events: [message("@me", "a", { event_id: "$100" })] },
+        });
+        expect(store.messages.map((m) => m.id)).toEqual(["$100"]);
+
+        store.addLocal({
+            event_id: "~t2",
+            txnId: "t2",
+            type: "m.room.message",
+            content: { body: "b" },
+        });
+        store.applySync({
+            timeline: { events: [message("@me", "b", { event_id: "$101" })] },
+        });
+        store.confirm("t2", "$101"); // Already there: the local one goes.
+        expect(store.messages.map((m) => m.id)).toEqual(["$100", "$101"]);
+
+        store.addLocal({
+            event_id: "~t3",
+            txnId: "t3",
+            type: "m.room.message",
+            content: { body: "c" },
+        });
+        store.fail("t3", { message: "No" });
+        expect(store.messages.at(-1)).toMatchObject({
+            status: "failed",
+            error: { message: "No" },
+        });
+        store.confirm("nope", "$1");
+        store.fail("nope", {});
+        expect(store.findLocal("nope")).toBe(null);
+    });
+
+    it("redacts, from the timeline and from older events", () => {
+        const store = new RoomStore("!r");
+        const one = message("@a", "one");
+        const two = message("@a", "two");
+        store.applySync({
+            timeline: {
+                events: [
+                    one,
+                    two,
+                    {
+                        type: "m.room.redaction",
+                        event_id: "$r1",
+                        content: { redacts: one.event_id },
+                    },
+                    {
+                        type: "m.room.redaction",
+                        event_id: "$r2",
+                        redacts: two.event_id,
+                        content: {},
+                    },
+                    {
+                        type: "m.room.redaction",
+                        event_id: "$r3",
+                        content: { redacts: "$none" },
+                    },
+                ],
+            },
+        });
+        expect(store.messages.map((m) => m.redacted)).toEqual([true, true]);
+        expect(store.messages[0].content).toEqual({});
+
+        const old = message("@a", "old");
+        store.prepend(
+            [
+                {
+                    type: "m.room.redaction",
+                    event_id: "$r4",
+                    content: { redacts: old.event_id },
+                },
+                {
+                    type: "m.room.redaction",
+                    event_id: "$r5",
+                    redacts: "$gone",
+                    content: {},
+                },
+                old,
+                one, // Known already.
+            ],
+            "t1",
+        );
+        expect(store.messages[0]).toMatchObject({
+            id: old.event_id,
+            redacted: true,
+        });
+        expect(store.more).toBe(true);
+        store.prepend([], undefined);
+        expect(store.more).toBe(false);
+    });
+
+    it("gathers reactions, edits, answers and replies", () => {
+        const store = new RoomStore("!r");
+        const hi = message("@a", "Hi");
+        const menu = message("@bot", "Pick");
+        store.applySync({
+            timeline: {
+                events: [
+                    hi,
+                    menu,
+                    reaction("@b", hi.event_id, "👍"),
+                    reaction("@me", hi.event_id, "👍"),
+                    reaction("@b", hi.event_id, "🎉", {
+                        unsigned: { redacted_because: {} },
+                    }),
+                    {
+                        type: "m.reaction",
+                        event_id: "$x1",
+                        content: {
+                            "m.relates_to": {
+                                rel_type: "m.reference",
+                                event_id: hi.event_id,
+                                key: "?",
+                            },
+                        },
+                    },
+                    { type: "m.reaction", event_id: "$x2", content: {} },
+                    message("@a", "* Hello", {
+                        content: {
+                            msgtype: "m.text",
+                            body: "* Hello",
+                            "m.new_content": {
+                                msgtype: "m.text",
+                                body: "Hello",
+                            },
+                            "m.relates_to": {
+                                rel_type: "m.replace",
+                                event_id: hi.event_id,
+                            },
+                        },
+                    }),
+                    message("@b", "* forged", {
+                        content: {
+                            "m.new_content": { body: "forged" },
+                            "m.relates_to": {
+                                rel_type: "m.replace",
+                                event_id: menu.event_id,
+                            },
+                        },
+                    }),
+                    message("@a", "Yes", {
+                        content: {
+                            msgtype: "m.text",
+                            body: "Yes",
+                            [ACTION]: { event_id: menu.event_id, button: "y" },
+                            "m.relates_to": {
+                                "m.in_reply_to": { event_id: menu.event_id },
+                            },
+                        },
+                    }),
+                ],
+            },
+        });
+        const [first, second, answer] = store.messages;
+        expect(first.content.body).toBe("Hello");
+        expect(first.edited).toBe(true);
+        expect(first.reactions.map((r) => [r.key, r.by])).toEqual([
+            ["👍", ["@b", "@me"]],
+        ]);
+        // Only its sender edits a message.
+        expect(second.content.body).toBe("Pick");
+        expect(second.edited).toBe(false);
+        expect(second.used).toBe(true);
+        expect(answer.replyTo).toBe(menu.event_id);
+        expect(store.lastMessage).toBe(answer);
+        expect(store.messages).toBe(store.messages); // Kept until a change.
+        expect(new RoomStore("!e").lastMessage).toBe(null);
+    });
+
+    it("says how far its messages got", () => {
+        const store = new RoomStore("!r");
+        const one = message("@me", "1");
+        const two = message("@me", "2");
+        const three = message("@me", "3", {
+            unsigned: {
+                [STATUS]: { status: "failed", error: { error: "Blocked" } },
+            },
+        });
+        const four = message("@me", "4");
+        store.applySync({
+            timeline: { events: [one, two, three, four] },
+            ephemeral: {
+                events: [
+                    {
+                        type: "m.receipt",
+                        content: {
+                            [one.event_id]: { "m.read": { "@a": {} } },
+                            [two.event_id]: { [DELIVERED]: { "@a": {} } },
+                            [four.event_id]: { "m.read": { "@me": {} } },
+                            $unknown: { "m.read": { "@b": {} } },
+                        },
+                    },
+                    {
+                        type: STATUS,
+                        content: { event_id: four.event_id, status: "sent" },
+                    },
+                ],
+            },
+        });
+        expect(store.messages.map((m) => m.status)).toEqual([
+            "read",
+            "delivered",
+            "failed",
+            "sent",
+        ]);
+        expect(store.messages[2].error).toEqual({ error: "Blocked" });
+        // A status event says it failed.
+        store.applySync({
+            ephemeral: {
+                events: [
+                    {
+                        type: STATUS,
+                        content: { event_id: two.event_id, status: "failed" },
+                    },
+                ],
+            },
+        });
+        expect(store.messages[1].status).toBe("failed");
+        expect(store.receipts.get("@a")).toEqual({
+            "m.read": one.event_id,
+            [DELIVERED]: two.event_id,
+        });
+    });
+
+    it("follows who is typing and what is being written", () => {
+        const store = new RoomStore("!r");
+        store.applySync({
+            ephemeral: {
+                events: [
+                    { type: "m.typing", content: { user_ids: ["@a", "@bot"] } },
+                    {
+                        type: STREAM,
+                        content: {
+                            id: "s1",
+                            sender: "@bot",
+                            body: "Hel",
+                            markdown: true,
+                        },
+                    },
+                    {
+                        type: STREAM,
+                        content: { id: "s2", sender: "@bot", body: "x" },
+                    },
+                    { type: "com.acme.other", content: {} },
+                ],
+            },
+        });
+        expect([...store.typing]).toEqual(["@a", "@bot"]);
+        const writing = store.messages.at(-2);
+        expect(writing).toMatchObject({
+            id: "stream:s1",
+            sender: "@bot",
+            streaming: true,
+            content: { msgtype: "m.text", body: "Hel", markdown: true },
+        });
+        expect(store.messages.at(-1).content.markdown).toBe(false);
+        // Its message came (in the same sync as an older update of it).
+        store.applySync({
+            timeline: {
+                events: [
+                    message("@bot", "Hello", {
+                        content: {
+                            msgtype: "m.text",
+                            body: "Hello",
+                            [STREAM]: { id: "s1" },
+                        },
+                    }),
+                ],
+            },
+            ephemeral: {
+                events: [
+                    {
+                        type: STREAM,
+                        content: { id: "s1", sender: "@bot", body: "Hell" },
+                    },
+                    { type: STREAM, content: { id: "s2", done: true } },
+                    { type: "m.typing" },
+                ],
+            },
+        });
+        expect(store.messages.map((m) => m.content.body)).toEqual(["Hello"]);
         expect(store.typing.size).toBe(0);
-
-        store.apply({
-            type: "read",
-            data: { conversation: "c1", participant: "p_a", until: "m" },
-        });
-        expect(store.readUntil.get("p_a")).toBe("m");
-    });
-
-    it("adds pages of history", () => {
-        const store = new ConversationStore("c1");
-        store.apply({ type: "message.created", data: message("new", 9) });
-        store.apply({
-            type: "history",
-            data: {
-                conversation: "c1",
-                messages: [message("old", 1), message("new", 9)],
-                before: "old",
-                more: true,
-            },
-        });
-        expect(store.messages.map((m) => m.id)).toEqual(["old", "new"]);
-        expect([store.more, store.before]).toEqual([true, "old"]);
-
-        store.apply({
-            type: "history",
-            data: { conversation: "c1", more: false },
-        });
-        expect([store.more, store.before]).toEqual([false, null]);
-    });
-
-    it("maps its participants", () => {
-        const store = new ConversationStore("c1");
-        expect(store.participants.size).toBe(0);
-        store.apply({
-            type: "conversation.created",
-            data: { id: "c1", participants: [{ id: "p_a", kind: "bot" }] },
-        });
-        expect(store.participants.get("p_a").kind).toBe("bot");
+        // A message stops its sender typing.
+        store.typing.add("@a");
+        store.applySync({ timeline: { events: [message("@a", "Hi")] } });
+        expect(store.typing.has("@a")).toBe(false);
+        expect(store.stateContent("m.room.topic")).toBe(null);
     });
 });

@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.db import connections, transaction
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
@@ -23,24 +22,20 @@ from . import services
 from .models import (
     AbstractConversation,
     AbstractParticipant,
-    Message,
+    RoomEvent,
     get_conversation_model,
     get_participant_model,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
 SESSION_KEY = "django_chat_ui_participant"
 
 logger = logging.getLogger("django_chat_ui")
-
-#: A command of an extension: ``(backend, request, participant, data)`` →
-#: the ``ack``'s data, or a list of frames ending with it.
-CommandHandler = Callable[
-    ["ChatBackend", "HttpRequest", AbstractParticipant, dict], Any
-]
 
 
 class ChatBackend:
@@ -50,15 +45,17 @@ class ChatBackend:
     allow_anonymous = False
 
     #: Where the hooks that react (``on_start``, ``on_message``,
-    #: ``on_action``) run: ``"inline"``, inside the request of the command,
-    #: or ``"thread"``, in a thread of their own once the command's changes
-    #: are committed, so the command is answered at once (a bot that takes
+    #: ``on_action``, ``on_event``) run: ``"inline"``, inside the request
+    #: that caused them, or ``"thread"``, in a thread of their own once its
+    #: changes are committed, so it's answered at once (a bot that takes
     #: seconds doesn't hold the sender's message). For a task queue,
     #: override ``run_hook()``.
     hooks = "inline"
 
-    #: Commands of extensions, by their namespaced type (section 12).
-    commands: dict[str, CommandHandler] = {}
+    #: The types of events of extensions that clients may send, besides
+    #: messages and reactions: namespaced (``com.acme.order.cancel``). Each
+    #: sent reaches ``on_event()``, after ``validate_content()``.
+    event_types: frozenset[str] | set[str] = frozenset()
 
     #: Largest upload, in bytes, when a conversation's ``attachments`` don't
     #: say.
@@ -82,6 +79,16 @@ class ChatBackend:
             )
             request.session[SESSION_KEY] = participant.pk
         return participant
+
+    def login(
+        self, request: HttpRequest, username: str, password: str
+    ) -> AbstractParticipant | None:
+        """The participant of a Matrix client logging in with a password
+        (``POST /login``): a user of the site's, with theirs."""
+        user = authenticate(request, username=username, password=password)
+        if user is None or not user.is_active:
+            return None
+        return self.participant_for_user(user)
 
     def participant_for_user(self, user: Any) -> AbstractParticipant:
         participant, _ = get_participant_model().objects.get_or_create(
@@ -107,21 +114,18 @@ class ChatBackend:
     def serialize_participant(
         self, participant: AbstractParticipant, data: dict[str, Any]
     ) -> dict[str, Any]:
-        """A participant as the protocol sends it (4.1): add what a site's
-        model has, under ``ext`` (``{"acme": {...}}``) or ``meta``."""
+        """This package's block of a participant's ``m.room.member`` (its
+        ``kind``, ``handle``, ``avatar`` and ``ext``): add what a site's
+        model has, under ``ext`` with your namespace (``{"com.acme": …}``)."""
         return data
 
     def serialize_conversation(
         self, conversation: AbstractConversation, data: dict[str, Any]
     ) -> dict[str, Any]:
-        """A conversation as the protocol sends it (4.2): add what a site's
-        model has (its priority, who it's assigned to…), under ``ext`` or
-        ``meta``."""
+        """This package's state event of what a conversation is (its
+        ``channel``, ``state`` and ``ext``): add what a site's model has (its
+        priority, who it's assigned to…), under ``ext``."""
         return data
-
-    def session_capabilities(self, participant: AbstractParticipant) -> dict[str, Any]:
-        """``ready.capabilities``: those of every conversation (8.2)."""
-        return {}
 
     # Starting conversations ------------------------------------------------
 
@@ -143,9 +147,9 @@ class ChatBackend:
         others: list[AbstractParticipant],
         channel: str,
     ) -> AbstractConversation:
-        """A new conversation. Without ``others`` (the "contact us" widget)
-        it goes to ``support_team()`` and waits, ``pending``, for one of them
-        to answer."""
+        """A new conversation (``POST /createRoom``). Without ``others`` (the
+        "contact us" widget) it goes to ``support_team()`` and waits,
+        ``pending``, for one of them to answer."""
         team = [] if others else self.support_team(channel)
         conversation = services.create_conversation(
             [participant, *others, *team],
@@ -154,6 +158,7 @@ class ChatBackend:
             title="" if others else participant.name,
             state="open" if others else "pending",
             capabilities=self.new_capabilities(channel),
+            creator=participant,
         )
         self.run_hook(self.on_start, request, conversation, participant)
         return conversation
@@ -207,11 +212,12 @@ class ChatBackend:
         request: HttpRequest,
         conversation: AbstractConversation,
         participant: AbstractParticipant,
-        parts: list[dict[str, Any]],
+        event_type: str,
+        content: dict[str, Any],
     ) -> None:
-        """Just before a message is added (its parts checked): what must
-        come first in the thread ("Ana joined"), or a last refusal (raise
-        ``ProtocolError``). Always inline."""
+        """Just before a client's event is added (checked against what the
+        conversation allows): what must come first in the thread ("Ana
+        joined"), or a last refusal (raise ``MatrixError``). Always inline."""
 
     def on_start(
         self,
@@ -221,34 +227,35 @@ class ChatBackend:
     ) -> None:
         """After a conversation is started: a greeting, a bot…"""
 
-    def on_message(self, request: HttpRequest, message: Message) -> None:
-        """After someone sent a message: a bot's answer, sending it on to
-        WhatsApp… It runs as ``hooks`` says."""
+    def on_message(self, request: HttpRequest, message: RoomEvent) -> None:
+        """After someone sent a message (not an edit, nor a button's
+        answer): a bot's answer, sending it on to WhatsApp… It runs as
+        ``hooks`` says."""
 
     def on_action(
         self,
         request: HttpRequest,
         participant: AbstractParticipant,
-        message: Message,
+        message: RoomEvent,
         button: dict[str, Any],
     ) -> None:
-        """After someone used a button of ``message``. By default the
-        button's label is written as their answer, as WhatsApp does."""
-        services.post(
-            message.conversation,
-            participant,
-            [{"type": "text", "text": str(button.get("label", button["id"]))}],
-        )
+        """After someone used a button of ``message``: their answer (the
+        button's label, as WhatsApp writes it) is in the thread already."""
 
-    def validate_parts(
+    def on_event(self, request: HttpRequest, event: RoomEvent) -> None:
+        """After a client sent an event of ``event_types``."""
+
+    def validate_content(
         self,
         conversation: AbstractConversation,
         participant: AbstractParticipant,
-        parts: list[dict],
+        event_type: str,
+        content: dict[str, Any],
     ) -> None:
-        """Raise ``ProtocolError`` for parts ``participant`` can't send. The
-        commands already checked the composer and attachments; extension
-        parts get here (allowed, with their ``fallback``)."""
+        """Raise ``MatrixError`` for an event ``participant`` can't send.
+        What the conversation allows is checked already; messages of
+        extensions' types (namespaced ``msgtype``, with a ``body``) and
+        events of ``event_types`` get here, allowed."""
 
 
 @cache

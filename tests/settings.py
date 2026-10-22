@@ -19,7 +19,7 @@ MEDIA_ROOT = tempfile.mkdtemp(prefix="chat-ui-tests-")
 LANGUAGE_CODE = "en"
 
 # The library's own backend; tests of the example set theirs.
-CHAT_UI = {"STREAM_TIMEOUT": 0.3, "POLL_INTERVAL": 0.05, "SETTLE": 1.0}
+CHAT_UI = {"SYNC_TIMEOUT": 0.3, "POLL_INTERVAL": 0.05, "SETTLE": 1.0}
 
 # The library's own models: the example's tickets (helpdesk.Ticket, a
 # model of its own for the conversations) are tested by settings_swapped.

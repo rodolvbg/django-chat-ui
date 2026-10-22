@@ -6,10 +6,10 @@ requires = [ "hatch-fancy-pypi-readme", "hatchling" ]
 name = "django-chat-ui"
 version = "0.1.0"
 description = """\
-  One chat interface for WhatsApp, chatbots, internal chat and \"contact us\" widgets: web components over an \
-  extensible protocol, and a Django backend for it.\
+  One chat interface for WhatsApp, chatbots, internal chat and \"contact us\" widgets: web components that speak \
+  Matrix, and a Django homeserver for them, with extensions for what a business chat needs.\
   """
-keywords = [ "chat", "chatbot", "django", "inbox", "messaging", "server-sent-events", "web-components", "whatsapp" ]
+keywords = [ "ag-ui", "chat", "chatbot", "django", "inbox", "matrix", "messaging", "web-components", "whatsapp" ]
 license = "MIT"
 license-files = [ "LICENSE" ]
 maintainers = [ { name = "Rodolfo Valentín Becerra García", email = "rodolvbg@gmail.com" } ]
@@ -36,12 +36,8 @@ classifiers = [
 ]
 dynamic = [ "readme" ]
 dependencies = [ "django>=4.2" ]
-# The WebSocket transport (django_chat_ui.consumers).
-optional-dependencies.channels = [ "channels>=4" ]
 optional-dependencies.dev = [
-  "channels>=4",
   "coverage[toml]>=7.4",
-  "daphne>=4",
   "django-stubs[compatible-mypy]>=5",
   "mypy>=1.10",
   "pre-commit>=4",
@@ -53,7 +49,6 @@ optional-dependencies.dev = [
   "tox>=4",
   "tox-uv>=1",
   "uvicorn>=0.30",
-  "websockets>=12",
 ]
 urls.Homepage = "https://github.com/rodolvbg/django-chat-ui"
 urls.Issues = "https://github.com/rodolvbg/django-chat-ui/issues"
@@ -61,9 +56,7 @@ urls.Repository = "https://github.com/rodolvbg/django-chat-ui"
 
 [dependency-groups]
 dev = [
-  "channels>=4",
   "coverage[toml]>=7.4",
-  "daphne>=4",
   "django-stubs[compatible-mypy]>=5",
   "mypy>=1.10",
   "pre-commit>=4",
@@ -75,7 +68,6 @@ dev = [
   "tox>=4",
   "tox-uv>=1",
   "uvicorn>=0.30",
-  "websockets>=12",
 ]
 
 [tool.hatch]
@@ -122,7 +114,7 @@ python_version = "3.10"
 warn_redundant_casts = true
 warn_unused_ignores = true
 plugins = [ "mypy_django_plugin.main" ]
-overrides = [ { module = [ "anthropic.*", "channels.*", "uvicorn.*" ], ignore_missing_imports = true } ]
+overrides = [ { module = [ "anthropic.*", "uvicorn.*" ], ignore_missing_imports = true } ]
 
 [tool.django-stubs]
 django_settings_module = "example.settings"

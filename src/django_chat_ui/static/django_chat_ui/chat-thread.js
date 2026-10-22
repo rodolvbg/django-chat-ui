@@ -1,29 +1,33 @@
 /**
- * <chat-thread>: one conversation of the chat UI protocol — its messages,
- * who is typing, and a composer that follows the conversation's
- * capabilities (free text, templates only, buttons only, closed).
+ * <chat-thread>: one conversation — a Matrix room: its messages, who is
+ * typing, and a composer that follows the conversation's capabilities (free
+ * text, templates only, buttons only, closed).
  *
- *   <chat-thread conversation="conv_1"></chat-thread>
- *   thread.client = new ChatClient(transport);   // then client.connect()
+ *   <chat-thread conversation="!1:example.com"></chat-thread>
+ *   thread.client = new ChatClient({ baseUrl });   // then client.start()
  *
  * Properties:
  *   client     a ChatClient (client.js)
  *   texts      the interface's texts, merged over TEXTS (translations)
- *   uploader   async (file, conversation) => part: makes attachments
- *              possible (a failed upload dispatches "uploaderror")
+ *
+ * Files are sent where the conversation takes them (a failed upload
+ * dispatches "uploaderror").
  *
  * It renders with DOM nodes and classes (chat.css), no HTML strings, so it
  * works under a strict Content Security Policy.
  */
 
+import { renderContent } from "./content.js";
 import { element, format } from "./dom.js";
-import { renderPart } from "./parts.js";
 import {
     attachmentTypes,
     capability,
     composerMode,
+    mediaType,
     reactionEmojis,
-} from "./protocol.js";
+    SYSTEM,
+    TEMPLATE,
+} from "./matrix.js";
 
 export const TEXTS = {
     placeholder: "Write a message…",
@@ -47,6 +51,7 @@ export const TEXTS = {
     log: "Messages",
     react: "React",
     you: "You",
+    deleted: "Message deleted",
 };
 
 const STATUS_MARKS = { sending: "🕓", sent: "✓", delivered: "✓✓", read: "✓✓" };
@@ -57,7 +62,6 @@ export class ChatThread extends HTMLElement {
         this._client = null;
         this._store = null;
         this._texts = TEXTS;
-        this.uploader = null;
         this.onChange = () => this.render();
         this.typingTimer = null;
         /** The message whose reaction picker is open. */
@@ -108,25 +112,9 @@ export class ChatThread extends HTMLElement {
         // Connected, it's built (connectedCallback).
         if (!this._client || !id || !this.isConnected) return;
         this._store?.removeEventListener("change", this.onChange);
-        this._store = this._client.conversation(id);
+        this._store = this._client.room(id);
         this._store.addEventListener("change", this.onChange);
         this.render();
-        this.open();
-    }
-
-    /** Subscribe to the conversation, once the client has a session. */
-    open() {
-        const client = this._client;
-        const store = this._store;
-        if (store.opened) return;
-        if (!client.me) {
-            client.addEventListener("ready", () => this.open(), { once: true });
-            return;
-        }
-        store.opened = true;
-        client.open(store.id).catch(() => {
-            store.opened = false;
-        });
     }
 
     // Layout ---------------------------------------------------------------
@@ -166,14 +154,16 @@ export class ChatThread extends HTMLElement {
         this.markRead();
     }
 
-    /** Tell the server the latest message from others has been seen. */
+    /** Tell the server the latest message from others has been seen: not
+     * while it's hidden (a closed widget, an inbox showing another). */
     markRead() {
-        const me = this._client.me?.id;
+        if (document.hidden || this.closest("[hidden]")) return;
+        const me = this._client.me;
         // The client's own messages (pending ones too) aren't "read".
         const last = this._store.messages.findLast(
-            (message) => message.author !== me,
+            (message) => message.sender !== me && !message.streaming,
         );
-        if (!last || last.id === this.readSent || document.hidden) return;
+        if (!last || last.id === this.readSent) return;
         this.readSent = last.id;
         this._client.read(this._store.id, last.id).catch(() => {
             // Told again on the next render.
@@ -192,8 +182,9 @@ export class ChatThread extends HTMLElement {
     renderMessages() {
         const store = this._store;
         const participants = store.participants;
-        const me = this._client.me?.id;
-        const receipts = capability(store.conversation, "receipts");
+        const me = this._client.me;
+        const conversation = store.conversation;
+        const receipts = capability(conversation, "receipts");
         const nodes = [];
         let previous = null;
         for (const message of store.messages) {
@@ -202,8 +193,9 @@ export class ChatThread extends HTMLElement {
                     me,
                     participants,
                     receipts,
+                    conversation,
                     continued:
-                        previous?.author === message.author &&
+                        previous?.sender === message.sender &&
                         !this.isSystem(message, participants),
                 }),
             );
@@ -242,15 +234,18 @@ export class ChatThread extends HTMLElement {
 
     isSystem(message, participants) {
         return (
-            !message.author ||
-            participants.get(message.author)?.kind === "system" ||
-            message.parts.every((part) => part.type === "system")
+            SYSTEM in message.content ||
+            participants.get(message.sender)?.kind === "system" ||
+            String(message.sender).startsWith("@system:")
         );
     }
 
-    renderMessage(message, { me, participants, receipts, continued }) {
-        const author = participants.get(message.author);
-        const own = message.author !== undefined && message.author === me;
+    renderMessage(
+        message,
+        { me, participants, receipts, conversation, continued },
+    ) {
+        const author = participants.get(message.sender);
+        const own = Boolean(message.sender) && message.sender === me;
         const system = this.isSystem(message, participants);
         const kind = system
             ? "system"
@@ -267,24 +262,36 @@ export class ChatThread extends HTMLElement {
             node.append(element("div", "chat-author", author.name));
         }
         const bubble = element("div", "chat-bubble");
-        const context = {
-            message,
-            store: this._store,
-            client: this._client,
-            texts: this._texts,
-            act: (button) => this.act(message, button),
-        };
-        for (const part of message.parts) {
-            const rendered = renderPart(part, context);
+        if (message.redacted) {
+            bubble.append(
+                element("div", "chat-part chat-deleted", this._texts.deleted),
+            );
+        } else {
+            const context = {
+                message,
+                store: this._store,
+                client: this._client,
+                texts: this._texts,
+                media: (uri) => this._client.mediaUrl(uri),
+                act: (button) => this.act(message, button),
+            };
+            const rendered = system
+                ? element("div", "chat-system", message.content.body)
+                : renderContent(message.content, context);
             rendered.classList?.add("chat-part");
             bubble.append(rendered);
         }
         node.append(bubble);
         if (!system) {
-            const reactions = this.renderReactions(message, me, participants);
+            const reactions = this.renderReactions(
+                message,
+                me,
+                participants,
+                conversation,
+            );
             if (reactions) node.append(reactions);
             const meta = this.renderMeta(message, own, receipts);
-            if (this.reactable(message).length) {
+            if (this.reactable(message, conversation).length) {
                 meta.append(this.renderReactButton(message));
             }
             node.append(meta);
@@ -293,26 +300,25 @@ export class ChatThread extends HTMLElement {
     }
 
     /** Whether one can react to this message here, and with what. */
-    reactable(message) {
-        const emojis = reactionEmojis(this._store.conversation);
+    reactable(message, conversation) {
+        const emojis = reactionEmojis(conversation);
         const can =
             emojis.length > 0 &&
-            !message.deleted &&
+            !message.redacted &&
             !message.streaming &&
-            message.status !== "sending" &&
-            message.status !== "failed";
+            !message.id.startsWith("~");
         return can ? emojis : [];
     }
 
     /** Its reactions (who, on hover), and the picker when it's open: only
      * when there's any, not to take a line under every message. */
-    renderReactions(message, me, participants) {
-        const emojis = this.reactable(message);
-        const reactions = (message.reactions ?? []).filter((r) => r.by?.length);
+    renderReactions(message, me, participants, conversation) {
+        const emojis = this.reactable(message, conversation);
+        const reactions = message.reactions;
         const open = this.picking === message.id && emojis.length > 0;
         if (!reactions.length && !open) return null;
         const mine = new Set(
-            reactions.filter((r) => r.by.includes(me)).map((r) => r.emoji),
+            reactions.filter((r) => r.by.includes(me)).map((r) => r.key),
         );
         const row = element("div", "chat-reactions");
         for (const reaction of reactions) {
@@ -323,23 +329,20 @@ export class ChatThread extends HTMLElement {
             );
             const button = element("button", "chat-reaction");
             button.type = "button";
-            button.dataset.emoji = reaction.emoji;
+            button.dataset.emoji = reaction.key;
             button.append(
-                element("span", "chat-reaction-emoji", reaction.emoji),
+                element("span", "chat-reaction-emoji", reaction.key),
                 element("span", "chat-reaction-count", reaction.by.length),
             );
             button.title = names.join(", ");
             button.setAttribute(
                 "aria-label",
-                `${reaction.emoji} ${button.title}`,
+                `${reaction.key} ${button.title}`,
             );
-            button.setAttribute(
-                "aria-pressed",
-                String(mine.has(reaction.emoji)),
-            );
+            button.setAttribute("aria-pressed", String(mine.has(reaction.key)));
             button.disabled = !emojis.length;
             button.addEventListener("click", () =>
-                this.react(message, reaction.emoji, !mine.has(reaction.emoji)),
+                this.react(message, reaction.key, !mine.has(reaction.key)),
             );
             row.append(button);
         }
@@ -395,8 +398,12 @@ export class ChatThread extends HTMLElement {
     }
 
     react(message, emoji, active) {
-        this._client.react(message.id, emoji, active).catch(() => {
-            // The server's message.updated says what is; nothing changed.
+        const client = this._client;
+        const done = active
+            ? client.react(this._store.id, message.id, emoji)
+            : client.unreact(this._store.id, message.id, emoji);
+        done.catch(() => {
+            // What the server has comes with the next sync.
         });
         this.pick(null, message.id);
     }
@@ -405,14 +412,14 @@ export class ChatThread extends HTMLElement {
         const meta = element("div", "chat-meta");
         if (message.createdAt) {
             const time = element("time", "chat-time");
-            time.dateTime = message.createdAt;
+            time.dateTime = new Date(message.createdAt).toISOString();
             time.textContent = new Date(message.createdAt).toLocaleTimeString(
                 document.documentElement.lang || undefined,
                 { hour: "2-digit", minute: "2-digit" },
             );
             meta.append(time);
         }
-        if (message.editedAt) {
+        if (message.edited) {
             meta.append(element("span", "chat-edited", this._texts.edited));
         }
         if (own && message.status === "failed") {
@@ -427,7 +434,7 @@ export class ChatThread extends HTMLElement {
             retry.type = "button";
             retry.addEventListener("click", () =>
                 this._client
-                    .retry(this._store.id, message.clientId)
+                    .retry(this._store.id, message.txnId)
                     .catch(() => {}),
             );
             meta.append(retry);
@@ -439,9 +446,9 @@ export class ChatThread extends HTMLElement {
             const status = element(
                 "span",
                 `chat-status chat-status--${message.status}`,
-                STATUS_MARKS[message.status] ?? "",
+                STATUS_MARKS[message.status],
             );
-            status.title = this._texts[message.status] ?? message.status;
+            status.title = this._texts[message.status];
             status.setAttribute("aria-label", status.title);
             meta.append(status);
         }
@@ -449,8 +456,14 @@ export class ChatThread extends HTMLElement {
     }
 
     renderTyping() {
-        const me = this._client.me?.id;
-        const others = [...this._store.typing].filter((id) => id !== me);
+        const me = this._client.me;
+        // Those writing a message that shows already aren't "typing".
+        const writing = new Set(
+            [...this._store.streams.values()].map((stream) => stream.sender),
+        );
+        const others = [...this._store.typing].filter(
+            (id) => id !== me && !writing.has(id),
+        );
         const names = others.map(
             (id) => this._store.participants.get(id)?.name ?? "",
         );
@@ -471,7 +484,6 @@ export class ChatThread extends HTMLElement {
             mode,
             conversation.capabilities?.composer,
             conversation.capabilities?.attachments,
-            Boolean(this.uploader),
             this._texts,
         ]);
         if (this.composerKey === key) return; // Keep what's being typed.
@@ -518,7 +530,7 @@ export class ChatThread extends HTMLElement {
         this.input = input;
         const nodes = [];
         const types = attachmentTypes(conversation);
-        if (types.length && this.uploader) {
+        if (types.length && this._client.upload) {
             const file = element("input", "chat-file-input");
             file.type = "file";
             file.hidden = true;
@@ -627,7 +639,7 @@ export class ChatThread extends HTMLElement {
             if (!text) return;
             this.input.value = "";
             this.stopTyping();
-            this.send([{ type: "text", text }]);
+            this.send({ msgtype: "m.text", body: text });
         } else if (mode === "templates") {
             const templates =
                 conversation.capabilities.composer.templates ?? [];
@@ -635,19 +647,19 @@ export class ChatThread extends HTMLElement {
             const template = templates.find((item) => item.id === select.value);
             if (!template) return;
             const params = this.composer.querySelector(".chat-template-params");
-            this.send([
-                {
-                    type: "template",
-                    template: template.id,
+            this.send({
+                msgtype: TEMPLATE,
+                body: this.templateText(template, params),
+                [TEMPLATE]: {
+                    id: template.id,
                     params: this.templateValues(params),
-                    fallback: this.templateText(template, params),
                 },
-            ]);
+            });
         }
     }
 
-    send(parts) {
-        this._client.send(this._store.id, parts).catch(() => {
+    send(content) {
+        this._client.send(this._store.id, content).catch(() => {
             // Shown on the message itself ("failed", with Retry).
         });
     }
@@ -656,24 +668,30 @@ export class ChatThread extends HTMLElement {
         const [file] = input.files;
         if (!file) return;
         input.value = "";
-        let part;
+        const types = attachmentTypes(this._store.conversation);
+        const msgtype = mediaType(file.type, types);
+        let url;
         try {
-            part = await this.uploader(file, this._store.id);
+            if (!msgtype) throw new Error("unsupported");
+            url = await this._client.upload(file);
         } catch (error) {
             this.dispatchEvent(
                 new CustomEvent("uploaderror", { detail: { file, error } }),
             );
             return;
         }
-        if (part) this.send([part]);
+        const content = {
+            msgtype,
+            body: file.name,
+            url,
+            info: { mimetype: file.type, size: file.size },
+        };
+        if (msgtype === "m.file") content.filename = file.name;
+        this.send(content);
     }
 
     act(message, button) {
-        message.ext = { ...message.ext, chat: { used: button.id } };
-        this._store.changed();
-        this._client
-            .action(this._store.id, message.id, button.id)
-            .catch(() => {});
+        this._client.action(this._store.id, message.id, button).catch(() => {});
     }
 
     typed() {

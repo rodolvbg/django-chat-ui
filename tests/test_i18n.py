@@ -88,11 +88,10 @@ def test_compiled_catalog_is_up_to_date(catalog):
 
 
 @pytest.mark.django_db
-def test_errors_in_spanish(customer_chat, conversation):
-    with translation.override("es"):
-        customer_chat.client.cookies["django_language"] = "es"
-        error = customer_chat.error("message.send", {"conversation": "999"})
-    assert error["message"] == "No existe esa conversación."
+def test_errors_in_spanish(customer_api, conversation):
+    customer_api.client.cookies["django_language"] = "es"
+    response = customer_api.send("!999:localhost", {"msgtype": "m.text", "body": "x"})
+    assert response.json()["error"] == "No estás en esta sala."
 
 
 def test_the_interface_in_spanish():

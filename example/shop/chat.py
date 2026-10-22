@@ -14,12 +14,12 @@ import os
 import time
 from typing import TYPE_CHECKING, Any
 
-from django_chat_ui import services
+from django_chat_ui import content, services
 from django_chat_ui.backend import ChatBackend
 from django_chat_ui.models import (
     AbstractConversation,
     AbstractParticipant,
-    Message,
+    RoomEvent,
     get_participant_model,
 )
 
@@ -71,7 +71,7 @@ def slowly(chunks: list[str], delay: float) -> Iterator[str]:
 
 def say(
     conversation: AbstractConversation, chunks: list[str], delay: float = 0.12
-) -> Message:
+) -> RoomEvent | None:
     """Words of its own, a little at a time (each chunk sent as it comes)."""
     return services.stream_text(
         conversation, assistant(), slowly(chunks, delay), every=0
@@ -82,14 +82,12 @@ def history(conversation: AbstractConversation) -> list[dict[str, str]]:
     """The conversation as the model takes it: the assistant's turns and
     the others', starting with the customer's."""
     turns: list[dict[str, str]] = []
-    for message in conversation.messages.exclude(author=None).select_related("author"):
-        text = " ".join(
-            str(part.get("text") or part.get("fallback") or "")
-            for part in message.parts
-        ).strip()
-        if not text:
+    messages = conversation.messages.exclude(sender=None).filter(redacted_by=None)
+    for message in messages.select_related("sender"):
+        text = message.body.strip()
+        if not text or message.sender is None:
             continue
-        role = "assistant" if message.author.kind == "bot" else "user"
+        role = "assistant" if message.sender.kind == "bot" else "user"
         if turns and turns[-1]["role"] == role:
             turns[-1]["content"] += "\n" + text
         else:
@@ -136,22 +134,22 @@ class DemoBackend(ChatBackend):
         }
 
     def serialize_participant(self, participant, data):
-        # A contact's company (helpdesk.Contact), for the "shop" extension.
+        # A contact's company (helpdesk.Contact), for the shop's extension.
         if getattr(participant, "company", ""):
             data["ext"] = {
                 **data.get("ext", {}),
-                "shop": {"company": participant.company},
+                "com.example.shop": {"company": participant.company},
             }
         return data
 
     def serialize_conversation(self, conversation, data):
         # The fields of the shop's tickets (helpdesk.Ticket), for whoever
-        # knows the "shop" extension; others ignore them.
+        # knows the shop's extension; others ignore them.
         if hasattr(conversation, "priority"):
             assignee = conversation.assignee
             data["ext"] = {
                 **data.get("ext", {}),
-                "shop": {
+                "com.example.shop": {
                     "priority": conversation.get_priority_display().lower(),
                     "assignee": assignee.get_username() if assignee else None,
                 },
@@ -162,24 +160,14 @@ class DemoBackend(ChatBackend):
         return [*super().support_team(channel), assistant()]
 
     def on_start(self, request, conversation, participant) -> None:
-        services.post(
+        services.send(
             conversation,
             assistant(),
-            [
-                {
-                    "type": "text",
-                    "text": "Hi! I'm the shop's assistant. How can I help?",
-                },
-                {
-                    "type": "buttons",
-                    "buttons": MENU,
-                    "fallback": " / ".join(b["label"] for b in MENU),
-                },
-            ],
+            content.text("Hi! I'm the shop's assistant. How can I help?", buttons=MENU),
         )
 
     def on_action(self, request, participant, message, button) -> None:
-        super().on_action(request, participant, message, button)  # Their answer.
+        # Their answer (the button's label) is in the thread already.
         conversation = message.conversation
         if button["id"] == "human":
             # The assistant leaves it to the team from now on.
@@ -187,7 +175,9 @@ class DemoBackend(ChatBackend):
             services.update_conversation(conversation, meta=meta)
         say(conversation, ANSWERS.get(button["id"], ["OK."]))
 
-    def before_send(self, request, conversation, participant, parts) -> None:
+    def before_send(
+        self, request, conversation, participant, event_type, content
+    ) -> None:
         if participant.kind == "agent" and conversation.state == "pending":
             # Someone of the team answers: it's theirs now, and it says so
             # before their first message.
@@ -199,9 +189,9 @@ class DemoBackend(ChatBackend):
                 )
             services.system(conversation, f"{participant.name} joined", code="joined")
 
-    def on_message(self, request: HttpRequest, message: Message) -> None:
+    def on_message(self, request: HttpRequest, message: RoomEvent) -> None:
         conversation = message.conversation
-        author = message.author
+        author = message.sender
         if author is None or conversation.state != "pending":
             return
         if author.kind in {"contact", "user"}:

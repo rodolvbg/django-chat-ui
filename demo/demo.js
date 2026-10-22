@@ -1,5 +1,5 @@
 /**
- * An agent's inbox on one in-memory server — a chatbot that streams its
+ * An agent's inbox on one in-memory homeserver — a chatbot that streams its
  * answers and offers quick replies, a WhatsApp chat with receipts whose
  * 24-hour window closes, and an internal chat — and, on another, a site's
  * visitor with the "contact us" widget. Same <chat-thread>, different
@@ -8,63 +8,60 @@
 import "../src/django_chat_ui/static/django_chat_ui/chat-inbox.js";
 import "../src/django_chat_ui/static/django_chat_ui/chat-widget.js";
 import { ChatClient } from "../src/django_chat_ui/static/django_chat_ui/client.js";
+import { FakeHomeserver } from "../src/django_chat_ui/static/django_chat_ui/homeserver.js";
 import {
-    FakeServer,
-    MemoryTransport,
-} from "../src/django_chat_ui/static/django_chat_ui/transports/memory.js";
+    BUTTONS,
+    DELIVERED,
+} from "../src/django_chat_ui/static/django_chat_ui/matrix.js";
 
-const me = { id: "p_me", kind: "agent", name: "Rodolfo" };
-const bot = { id: "p_bot", kind: "bot", name: "Assistant" };
-const ana = {
-    id: "p_ana",
+const me = { id: "@rodolfo:demo", kind: "agent", name: "Rodolfo" };
+const bot = { id: "@assistant:demo", kind: "bot", name: "Assistant" };
+const anna = {
+    id: "@anna:demo",
     kind: "contact",
     name: "Anna Smith",
     handle: "+1 555 0100",
 };
-const lucy = { id: "p_lucy", kind: "user", name: "Lucy Martin" };
-const minutesAgo = (n) => new Date(Date.now() - n * 60000).toISOString();
+const lucy = { id: "@lucy:demo", kind: "user", name: "Lucy Martin" };
+const minutesAgo = (n) => Date.now() - n * 60000;
 
-const server = new FakeServer({ me });
-server.addConversation(
+/** A text with quick replies, as the server's `content.text()` makes it. */
+function withButtons(body, buttons) {
+    return {
+        msgtype: "m.text",
+        body: `${body}\n\n${buttons.map((b) => `• ${b.label}`).join("\n")}`,
+        [BUTTONS]: { body, buttons },
+    };
+}
+
+const server = new FakeHomeserver({ me });
+for (const user of [bot, anna, lucy]) server.addUser(user);
+server.addRoom(
     {
-        id: "conv_bot",
+        id: "!bot:demo",
         channel: "bot",
-        participants: [me, bot],
+        members: [me.id, bot.id],
         capabilities: {
-            streaming: true,
             buttons: true,
             composer: { mode: "free", placeholder: "Ask anything…" },
         },
     },
     [
         {
-            id: "b1",
-            conversation: "conv_bot",
-            author: "p_bot",
-            createdAt: minutesAgo(5),
-            parts: [
-                {
-                    type: "text",
-                    format: "markdown",
-                    text: "Hi! I'm the **assistant**. How can I help?",
-                },
-                {
-                    type: "buttons",
-                    buttons: [
-                        { id: "order", label: "My order" },
-                        { id: "human", label: "Talk to someone" },
-                    ],
-                    fallback: "My order / Talk to someone",
-                },
-            ],
+            sender: bot.id,
+            ts: minutesAgo(5),
+            content: withButtons("Hi! I'm the assistant. How can I help?", [
+                { id: "order", label: "My order" },
+                { id: "human", label: "Talk to someone" },
+            ]),
         },
     ],
 );
-server.addConversation(
+server.addRoom(
     {
-        id: "conv_wa",
+        id: "!wa:demo",
         channel: "whatsapp",
-        participants: [me, ana],
+        members: [me.id, anna.id],
         capabilities: {
             receipts: true,
             typing: true,
@@ -75,53 +72,52 @@ server.addConversation(
     },
     [
         {
-            id: "w1",
-            conversation: "conv_wa",
-            author: "p_ana",
-            createdAt: minutesAgo(30),
-            parts: [{ type: "text", text: "Hi, do you have it in M?" }],
+            sender: anna.id,
+            ts: minutesAgo(30),
+            content: { msgtype: "m.text", body: "Hi, do you have it in M?" },
         },
         {
-            id: "w2",
-            conversation: "conv_wa",
-            author: "p_me",
-            createdAt: minutesAgo(28),
-            status: "read",
-            parts: [{ type: "text", text: "Yes! Here's a photo." }],
-            reactions: [{ emoji: "❤️", by: ["p_ana"] }],
+            sender: me.id,
+            ts: minutesAgo(28),
+            content: { msgtype: "m.text", body: "Yes! Here's a photo." },
         },
         {
-            id: "w3",
-            conversation: "conv_wa",
-            author: "p_me",
-            createdAt: minutesAgo(28),
-            status: "read",
-            parts: [
-                {
-                    type: "image",
-                    url: "shirt.svg",
-                    alt: "Blue T-shirt, size M",
-                    width: 240,
-                    height: 150,
-                },
-            ],
+            sender: me.id,
+            ts: minutesAgo(28),
+            content: {
+                msgtype: "m.image",
+                body: "Blue T-shirt, size M",
+                url: "shirt.svg",
+                info: { w: 240, h: 150, mimetype: "image/svg+xml" },
+            },
         },
         {
-            id: "w4",
-            conversation: "conv_wa",
-            author: "p_ana",
-            createdAt: minutesAgo(27),
-            parts: [{ type: "text", text: "Perfect, thanks 🙌" }],
+            sender: anna.id,
+            ts: minutesAgo(27),
+            content: { msgtype: "m.text", body: "Perfect, thanks 🙌" },
         },
     ],
 );
+const photo = server.rooms.get("!wa:demo").events.at(-3);
+server.event("!wa:demo", anna.id, "m.reaction", {
+    "m.relates_to": {
+        rel_type: "m.annotation",
+        event_id: photo.event_id,
+        key: "❤️",
+    },
+});
+server.receipt(
+    "!wa:demo",
+    anna.id,
+    server.rooms.get("!wa:demo").events.at(-2).event_id,
+);
 
-server.addConversation(
+server.addRoom(
     {
-        id: "conv_team",
+        id: "!team:demo",
         channel: "internal",
         title: "Support team",
-        participants: [me, lucy],
+        members: [me.id, lucy.id],
         unread: 1,
         capabilities: {
             receipts: true,
@@ -132,16 +128,12 @@ server.addConversation(
     },
     [
         {
-            id: "t1",
-            conversation: "conv_team",
-            author: "p_lucy",
-            createdAt: minutesAgo(12),
-            parts: [
-                {
-                    type: "text",
-                    text: "Can you look at order A-1029? The customer asks about the delivery.",
-                },
-            ],
+            sender: lucy.id,
+            ts: minutesAgo(12),
+            content: {
+                msgtype: "m.text",
+                body: "Can you look at order A-1029? The customer asks about the delivery.",
+            },
         },
     ],
 );
@@ -151,133 +143,77 @@ const answers = {
     human: ["Putting you through ", "to someone ", "in a moment."],
 };
 
-async function botSays(chunks, buttons) {
-    await server.stream("conv_bot", "p_bot", chunks, {
-        parts: [
-            { type: "text", format: "markdown", text: chunks.join("") },
-            ...(buttons
-                ? [
-                      {
-                          type: "buttons",
-                          buttons,
-                          fallback: buttons.map((b) => b.label).join(" / "),
-                      },
-                  ]
-                : []),
-        ],
-    });
-}
-
-server.onAction = (data) => {
-    // The reply chosen, as the user's message (as WhatsApp shows it).
-    const message = server.messages
-        .get(data.conversation)
-        .find((m) => m.id === data.message);
-    const button = message.parts
-        .flatMap((part) => part.buttons ?? [])
-        .find((b) => b.id === data.button);
-    server.post(
-        data.conversation,
-        me.id,
-        [{ type: "text", text: button?.label ?? data.button }],
-        { status: "sent" },
-    );
-    botSays(answers[data.button] ?? ["OK."]);
+server.onAction = (_event, server, button) => {
+    server.stream("!bot:demo", bot.id, answers[button?.id] ?? ["OK."]);
 };
-server.onMessage = (message) => {
-    if (message.conversation === "conv_bot") {
-        botSays(
-            ["Let me ", "check… ", "Is it about an order?"],
-            [{ id: "order", label: "Yes, an order" }],
-        );
-    } else if (message.conversation === "conv_wa") {
-        // WhatsApp: delivered, then read, then the window closes.
+server.onMessage = (event) => {
+    const room = [...server.rooms.values()].find((r) =>
+        r.events.includes(event),
+    );
+    if (room.id === "!bot:demo") {
+        server.stream("!bot:demo", bot.id, [
+            "Let me ",
+            "check… ",
+            "Is it about an order?",
+        ]);
+    } else if (room.id === "!wa:demo") {
+        // WhatsApp: delivered, then read.
         setTimeout(
-            () =>
-                server.emit("message.updated", {
-                    id: message.id,
-                    conversation: "conv_wa",
-                    status: "delivered",
-                }),
+            () => server.receipt(room.id, anna.id, event.event_id, DELIVERED),
             600,
         );
         setTimeout(
-            () =>
-                server.emit("message.updated", {
-                    id: message.id,
-                    conversation: "conv_wa",
-                    status: "read",
-                }),
+            () => server.receipt(room.id, anna.id, event.event_id),
             1400,
         );
     }
 };
 
-const client = new ChatClient(new MemoryTransport(server));
+const client = new ChatClient({ fetch: server.fetch });
 const inbox = document.querySelector("chat-inbox");
 inbox.client = client;
-await client.connect();
+await client.start();
 
-// The site's visitor, on its own server: the widget starts a conversation
-// that the assistant greets.
-const visitor = { id: "p_visitor", kind: "user", name: "You" };
-const site = new FakeServer({ me: visitor });
-site.newConversation = {
-    participants: [visitor, bot],
+// The site's visitor, on its own homeserver: the widget starts a room that
+// the assistant greets.
+const visitor = { id: "@visitor:demo", kind: "contact", name: "You" };
+const site = new FakeHomeserver({ me: visitor });
+site.addUser(bot);
+site.newRoom = {
     capabilities: {
-        streaming: true,
         buttons: true,
         composer: { mode: "free", placeholder: "Ask us anything…" },
     },
 };
-site.onStart = (conversation) => {
+site.onStart = (room) => {
+    site.join(room, bot.id);
     setTimeout(() => {
-        site.post(conversation.id, bot.id, [
-            { type: "text", text: "Hi! How can we help?" },
-            {
-                type: "buttons",
-                buttons: [
-                    { id: "order", label: "My order" },
-                    { id: "human", label: "Talk to someone" },
-                ],
-                fallback: "My order / Talk to someone",
-            },
-        ]);
+        site.post(
+            room,
+            bot.id,
+            withButtons("Hi! How can we help?", [
+                { id: "order", label: "My order" },
+                { id: "human", label: "Talk to someone" },
+            ]),
+        );
     }, 300);
 };
-site.onAction = (data) => {
-    const message = site.messages
-        .get(data.conversation)
-        .find((m) => m.id === data.message);
-    const button = message.parts
-        .flatMap((part) => part.buttons ?? [])
-        .find((b) => b.id === data.button);
-    site.post(
-        data.conversation,
-        visitor.id,
-        [{ type: "text", text: button?.label ?? data.button }],
-        { status: "sent" },
-    );
-    site.stream(data.conversation, bot.id, answers[data.button] ?? ["OK."], {
-        parts: [
-            {
-                type: "text",
-                format: "markdown",
-                text: (answers[data.button] ?? ["OK."]).join(""),
-            },
-        ],
-    });
+site.onAction = (event, site, button) => {
+    const room = [...site.rooms.values()].find((r) => r.events.includes(event));
+    site.stream(room.id, bot.id, answers[button?.id] ?? ["OK."]);
 };
-site.onMessage = (message) => {
-    const chunks = ["Thanks, ", "someone will ", "answer you shortly."];
-    site.stream(message.conversation, bot.id, chunks, {
-        parts: [{ type: "text", text: chunks.join("") }],
-    });
+site.onMessage = (event) => {
+    const room = [...site.rooms.values()].find((r) => r.events.includes(event));
+    site.stream(room.id, bot.id, [
+        "Thanks, ",
+        "someone will ",
+        "answer you shortly.",
+    ]);
 };
-const visitorClient = new ChatClient(new MemoryTransport(site));
+const visitorClient = new ChatClient({ fetch: site.fetch });
 const widget = document.querySelector("chat-widget");
 widget.client = visitorClient;
-await visitorClient.connect();
+await visitorClient.start();
 
 // Demo controls, for screenshots and trying it out.
 window.demo = {
@@ -287,22 +223,18 @@ window.demo = {
     widget,
     site,
     closeWindow() {
-        server.update("conv_wa", {
-            capabilities: {
-                receipts: true,
-                composer: {
-                    mode: "templates",
-                    reason: "More than 24 hours since Anna's last message: templates only.",
-                    templates: [
-                        {
-                            id: "followup",
-                            name: "Follow-up",
-                            preview:
-                                "Hi {{1}}, can we help with anything else?",
-                            params: ["name"],
-                        },
-                    ],
-                },
+        server.setCapabilities("!wa:demo", {
+            composer: {
+                mode: "templates",
+                reason: "More than 24 hours since Anna's last message: templates only.",
+                templates: [
+                    {
+                        id: "followup",
+                        name: "Follow-up",
+                        preview: "Hi {{1}}, can we help with anything else?",
+                        params: ["name"],
+                    },
+                ],
             },
         });
     },

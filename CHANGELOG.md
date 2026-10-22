@@ -9,28 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The chat UI protocol, version 1.0 (draft), and its JSON Schema.
-- `<chat-thread>`, `<chat-inbox>` and `<chat-widget>`: web components over
-  the protocol, without a build step, safe under a strict Content Security
-  Policy.
-- `ChatClient`, and its transports: in memory (with a fake server, for demos
-  and tests), over HTTP (Server-Sent Events, or polling) and over a
-  WebSocket.
-- The Django app: models of conversations, participants, messages and
-  attachments; the protocol's commands; the stream of events, resumable;
-  `services` for integrations; `ChatBackend` to decide who chats and what
-  happens (its hooks inline, in a thread, or wherever `run_hook()` sends
-  them); `{% chat_ui %}`; the admin; `chat_ui_prune`.
+- Matrix as the protocol: the components are Matrix clients (`ChatClient`
+  over the Client-Server API: `/sync` with long polling or polling, a local
+  echo of what's sent, receipts, typing, reactions, media), and the Django
+  app a Matrix homeserver without federation (docs/protocol.md): access
+  tokens (`m.login.password`) or the site's session, rooms, their state,
+  `/messages`, media, CORS. Tested with matrix-js-sdk.
+- This package's extensions to Matrix, namespaced under
+  `io.github.rodolvbg.chat`, each with a fallback any other client shows:
+  the conversations' capabilities and channel, quick replies and their
+  answers, cards, WhatsApp's templates, shared contacts, link previews,
+  system notices, a `delivered` receipt, a message's `failed` status, and
+  messages being written (an AI's), as ephemeral events; their JSON Schema.
+- `<chat-thread>`, `<chat-inbox>` and `<chat-widget>`: web components without
+  a build step, safe under a strict Content Security Policy (HTML of
+  messages rebuilt from the specification's safe subset).
+- `homeserver.js`: a scriptable Matrix homeserver in memory, for demos and
+  tests.
+- The Django app: conversations, participants and their events (Matrix
+  rooms, users and events); `services` and `content` for integrations;
+  `ChatBackend` to decide who chats and what happens (its hooks inline, in
+  a thread, or wherever `run_hook()` sends them), with the event types and
+  message types of a site's extensions; `{% chat_ui %}`; the admin;
+  `chat_ui_prune`.
 - A site's own models of conversations and participants
   (`CHAT_UI_CONVERSATION_MODEL`, `CHAT_UI_PARTICIPANT_MODEL`), subclasses
   of `AbstractConversation` and `AbstractParticipant`; their fields reach
-  the interface through `ChatBackend.serialize_conversation()` and
+  the clients through `ChatBackend.serialize_conversation()` and
   `serialize_participant()`.
 - `services.stream_text()`: a message written as an AI model streams it,
-  its chunks sent together, finished when they end or fail.
-- Reactions: shown under the messages, and added from a picker, in the
-  conversations whose `reactions` capability allows them (any emoji, or a
-  list).
-- What the server sends is degraded for what each client says it renders.
-- The WebSocket transport, with Channels (`django-chat-ui[channels]`).
+  shown as it comes, sent when it ends or fails.
+- `django_chat_ui.agui.AgUiAgent`: AI agents that speak AG-UI answer in a
+  conversation, as they write.
+- Reactions, where a conversation's `reactions` capability allows them (any
+  emoji, or a list).
 - Spanish translation.

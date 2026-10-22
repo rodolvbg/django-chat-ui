@@ -28,10 +28,8 @@ def test_chat_ui_writes_what_a_page_needs():
         '<script type="module" src="/static/django_chat_ui/boot.js"></script>' in html
     )
     data = config(html)
-    assert data["events"] == "/chat/events"
-    assert data["commands"] == "/chat/commands"
-    assert data["uploads"] == "/chat/uploads"
-    assert data["transport"] == "sse"
+    assert data["baseUrl"] == "/chat"
+    assert data["poll"] == 0
     assert len(data["csrfToken"]) == 64
     assert data["texts"]["thread"]["send"] == "Send"
     # Nothing inline runs (strict CSP): only a data block, and a module.
@@ -40,14 +38,9 @@ def test_chat_ui_writes_what_a_page_needs():
 
 
 def test_chat_ui_polling_and_without_a_request():
-    data = config(render('{% chat_ui transport="polling" poll=5000 %}'))
-    assert data["transport"] == "polling"
+    data = config(render("{% chat_ui poll=5000 %}"))
     assert data["poll"] == 5000
     assert data["csrfToken"] == ""
-    assert config(render('{% chat_ui transport="x" %}'))["transport"] == "sse"
-    data = config(render('{% chat_ui transport="websocket" %}'))
-    assert data["transport"] == "websocket"
-    assert data["websocket"] == "/chat/ws"
 
 
 def test_chat_ui_texts_are_translated():

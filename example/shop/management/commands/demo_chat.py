@@ -5,7 +5,7 @@ and an internal one of the team. Creates the staff users ``admin`` and
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 
-from django_chat_ui import services
+from django_chat_ui import content, services
 from django_chat_ui.backend import get_backend
 from django_chat_ui.models import get_conversation_model, get_participant_model
 
@@ -53,16 +53,12 @@ class Command(BaseCommand):
                 "composer": {"mode": "free"},
             },
         )
-        services.post(
-            whatsapp,
-            anna,
-            [{"type": "text", "text": "Hi, do you have the blue one in M?"}],
+        services.send(
+            whatsapp, anna, content.text("Hi, do you have the blue one in M?")
         )
-        aside = services.post(
-            whatsapp, me, [{"type": "text", "text": "Yes! I'll put one aside."}]
-        )
-        services.update_message(aside, reactions=[{"emoji": "❤️", "by": [str(anna.pk)]}])
-        services.post(whatsapp, anna, [{"type": "text", "text": "Perfect, thanks 🙌"}])
+        aside = services.send(whatsapp, me, content.text("Yes! I'll put one aside."))
+        services.react(aside, anna, "❤️")
+        services.send(whatsapp, anna, content.text("Perfect, thanks 🙌"))
 
         team = services.create_conversation(
             [me, lucy],
@@ -76,15 +72,11 @@ class Command(BaseCommand):
                 "reactions": {"emojis": ["👍", "✅", "👀", "🎉"]},
             },
         )
-        services.post(
+        services.send(
             team,
             lucy,
-            [
-                {
-                    "type": "text",
-                    "text": "Can you look at order A-1029? "
-                    "The customer asks about the delivery.",
-                }
-            ],
+            content.text(
+                "Can you look at order A-1029? The customer asks about the delivery."
+            ),
         )
         self.stdout.write("Conversations created. Log in as admin / demo.")

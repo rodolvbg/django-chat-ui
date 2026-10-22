@@ -1,207 +1,245 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import "../../src/django_chat_ui/static/django_chat_ui/chat-widget.js";
 import { WIDGET_TEXTS } from "../../src/django_chat_ui/static/django_chat_ui/chat-widget.js";
-import { flush, setup } from "./helpers.js";
-
-async function widget(attributes = {}, options = {}) {
-    const result = await setup(options);
-    const element = document.createElement("chat-widget");
-    for (const [name, value] of Object.entries(attributes))
-        element.setAttribute(name, value);
-    document.body.append(element);
-    element.client = result.client;
-    await flush();
-    return { ...result, widget: element };
-}
-
-const launcher = (element) => element.querySelector(".chat-widget-launcher");
-const panel = (element) => element.querySelector(".chat-widget-panel");
+import { BOT, flush, ME, says, setup, stopAll } from "./helpers.js";
 
 afterEach(() => {
+    stopAll();
     document.body.replaceChildren();
     window.localStorage.clear();
+    vi.restoreAllMocks();
 });
 
+async function widget(attributes = {}, rooms = []) {
+    const { client, server } = await setup({ rooms });
+    server.newRoom = { capabilities: { composer: { mode: "free" } } };
+    server.onStart = (room) => {
+        server.join(room, BOT.id);
+        server.post(room, BOT.id, says("Hi! How can we help?"));
+    };
+    const element = document.createElement("chat-widget");
+    for (const [name, value] of Object.entries(attributes)) {
+        element.setAttribute(name, value);
+    }
+    document.body.append(element);
+    element.client = client;
+    await flush();
+    return { widget: element, client, server };
+}
+
 describe("<chat-widget>", () => {
-    it("is a button until opened", async () => {
-        const { server, widget: element } = await widget({
-            heading: "Soporte",
-            subheading: "Te respondemos en minutos",
-        });
-
-        expect(launcher(element).getAttribute("aria-expanded")).toBe("false");
-        expect(launcher(element).getAttribute("aria-label")).toBe(
-            WIDGET_TEXTS.open,
-        );
-        expect(launcher(element).getAttribute("aria-controls")).toBe(
-            panel(element).id,
-        );
-        expect(panel(element).hidden).toBe(true);
-        expect(panel(element).getAttribute("role")).toBe("dialog");
-        expect(panel(element).getAttribute("aria-label")).toBe("Soporte");
-        expect(
-            element.querySelector(".chat-widget-subheading").textContent,
-        ).toBe("Te respondemos en minutos");
-        // Nothing started until someone opens it.
-        expect(server.received.map((frame) => frame.type)).toEqual(["hello"]);
-    });
-
-    it("starts a conversation on opening, and shows it", async () => {
+    it("opens, starting a conversation with the support team", async () => {
         const {
+            widget: element,
             server,
             client,
-            widget: element,
-        } = await widget({ channel: "web", with: "p_support p_bot" });
-        server.onStart = (conversation, s) =>
-            s.post(conversation.id, "p_bot", [
-                { type: "text", text: "¡Hola! ¿En qué te ayudo?" },
-            ]);
+        } = await widget({
+            heading: "Support",
+            subheading: "We answer in minutes",
+            channel: "web",
+            "storage-key": "support",
+        });
+        const launcher = element.querySelector(".chat-widget-launcher");
+        expect(launcher.getAttribute("aria-label")).toBe("Chat with us");
+        expect(launcher.getAttribute("aria-expanded")).toBe("false");
+        expect(element.querySelector(".chat-widget-panel").hidden).toBe(true);
         const opened = vi.fn();
-        element.addEventListener("open", (event) =>
-            opened(event.detail.conversation),
-        );
-
-        launcher(element).click();
+        element.addEventListener("open", (event) => opened(event.detail));
+        launcher.click();
         await flush();
-
-        const start = server.received.find((frame) => frame.data.with);
-        expect(start.data).toEqual({
-            with: ["p_support", "p_bot"],
+        expect(element.isOpen).toBe(true);
+        expect(launcher.getAttribute("aria-label")).toBe("Close the chat");
+        expect(element.querySelector(".chat-widget-heading").textContent).toBe(
+            "Support",
+        );
+        expect(
+            element.querySelector(".chat-widget-subheading").textContent,
+        ).toBe("We answer in minutes");
+        expect(
+            element
+                .querySelector(".chat-widget-panel")
+                .getAttribute("aria-label"),
+        ).toBe("Support");
+        const created = server.received.find((r) =>
+            r.path.endsWith("/createRoom"),
+        );
+        expect(created.body.invite).toEqual([]);
+        expect(created.body.initial_state[0].content).toEqual({
             channel: "web",
         });
-        const id = element.conversation;
-        expect(id).toMatch(/^conv_/);
-        expect(opened).toHaveBeenCalledWith(id);
-        expect(element.hasAttribute("open")).toBe(true);
-        expect(launcher(element).getAttribute("aria-expanded")).toBe("true");
-        expect(launcher(element).getAttribute("aria-label")).toBe(
-            WIDGET_TEXTS.close,
-        );
-        expect(panel(element).hidden).toBe(false);
-        const thread = element.querySelector("chat-thread");
-        expect(thread.getAttribute("conversation")).toBe(id);
-        expect(
-            client.conversation(id).messages.map((m) => m.parts[0].text),
-        ).toContain("¡Hola! ¿En qué te ayudo?");
-        expect(document.activeElement).toBe(
-            thread.querySelector(".chat-input"),
-        );
-
-        // Opened again: the same one.
-        element.close();
-        launcher(element).click();
-        await flush();
-        expect(server.received.filter((frame) => frame.data.with)).toHaveLength(
-            1,
-        );
-    });
-
-    it("closes with ×, Escape, or the button, giving the focus back", async () => {
-        const { widget: element } = await widget();
-        const closed = vi.fn();
-        element.addEventListener("close", closed);
-
-        for (const close of [
-            () => element.querySelector(".chat-widget-close").click(),
-            () =>
-                document.dispatchEvent(
-                    new KeyboardEvent("keydown", { key: "Escape" }),
-                ),
-            () => launcher(element).click(),
-        ]) {
-            await element.open();
-            close();
-            expect(element.hasAttribute("open")).toBe(false);
-            expect(panel(element).hidden).toBe(true);
-            expect(document.activeElement).toBe(launcher(element));
-        }
-        expect(closed).toHaveBeenCalledTimes(3);
-        // Escape while closed does nothing.
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-        expect(closed).toHaveBeenCalledTimes(3);
-    });
-
-    it("shows a conversation it's given, with its unread count while closed", async () => {
-        const conversation = { id: "conv_1", channel: "web", participants: [] };
-        const { server, widget: element } = await widget(
-            { conversation: "conv_1" },
-            { conversations: [[conversation, []]] },
-        );
-        const badge = element.querySelector(".chat-widget-badge");
-        expect(badge.hidden).toBe(true);
-
-        server.post("conv_1", "p_agent", [
-            { type: "text", text: "¿Sigues ahí?" },
-        ]);
-        await flush();
-        expect(badge.hidden).toBe(false);
-        expect(badge.textContent).toBe("1");
-        expect(badge.getAttribute("aria-label")).toBe("1 unread");
-
-        await element.open();
-        expect(badge.hidden).toBe(true);
-        expect(server.received.some((frame) => frame.data.with)).toBe(false);
-        expect(
-            element.querySelector("chat-thread").getAttribute("conversation"),
-        ).toBe("conv_1");
-    });
-
-    it("remembers the conversation it started, with a storage key", async () => {
-        const first = await widget({ "storage-key": "support" });
-        await first.widget.open();
-        const id = first.widget.conversation;
+        const room = element.conversation;
+        expect(opened).toHaveBeenCalledWith({ conversation: room });
         expect(
             window.localStorage.getItem("django-chat-ui:widget:support"),
-        ).toBe(id);
-        document.body.replaceChildren();
+        ).toBe(room);
+        const thread = element.querySelector("chat-thread");
+        expect(thread.getAttribute("conversation")).toBe(room);
+        expect(thread.querySelector(".chat-message").textContent).toContain(
+            "Hi! How can we help?",
+        );
+        expect(client.room(room).conversation.state).toBe("pending");
 
-        const second = await widget({ "storage-key": "support" });
-        expect(second.widget.conversation).toBe(id);
-    });
-
-    it("works without storage", async () => {
-        const getItem = vi
-            .spyOn(Storage.prototype, "getItem")
-            .mockImplementation(() => {
-                throw new Error("blocked");
-            });
-        const setItem = vi
-            .spyOn(Storage.prototype, "setItem")
-            .mockImplementation(() => {
-                throw new Error("blocked");
-            });
-        const { widget: element } = await widget({ "storage-key": "support" });
-        await element.open();
-        expect(element.conversation).toMatch(/^conv_/);
-        getItem.mockRestore();
-        setItem.mockRestore();
-    });
-
-    it("stays open, empty, if it can't start one", async () => {
-        const { client, widget: element } = await widget();
-        vi.spyOn(client, "start").mockRejectedValue(new Error("offline"));
-        await element.open();
-        expect(element.hasAttribute("open")).toBe(true);
-        expect(element.conversation).toBeNull();
+        // Closing (the button, Escape) and opening again: the same one.
+        element.querySelector(".chat-widget-close").click();
+        expect(element.isOpen).toBe(false);
+        expect(document.activeElement).toBe(launcher);
+        launcher.click();
+        await flush();
         expect(
-            element.querySelector("chat-thread").hasAttribute("conversation"),
-        ).toBe(false);
+            server.received.filter((r) => r.path.endsWith("/createRoom")),
+        ).toHaveLength(1);
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
+        expect(element.isOpen).toBe(true);
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        expect(element.isOpen).toBe(false);
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
 
-    it("takes its texts", async () => {
-        const { widget: element } = await widget();
-        element.texts = { open: "Escríbenos", heading: "Ayuda" };
-        expect(launcher(element).getAttribute("aria-label")).toBe("Escríbenos");
+    it("counts what's unread while closed", async () => {
+        const { widget: element, server } = await widget();
+        element.open();
+        await flush();
+        element.close();
+        const room = element.conversation;
+        server.post(room, BOT.id, says("Still there?"));
+        await flush();
+        const badge = element.querySelector(".chat-widget-badge");
+        expect(badge.hidden).toBe(false);
+        // The greeting was seen while open; not what came after.
+        expect(badge.textContent).toBe("1");
+        expect(badge.getAttribute("aria-label")).toBe("1 unread");
+        element.open();
+        expect(badge.hidden).toBe(true);
+        await flush();
+        expect(server.rooms.get(room).unread).toBe(0);
+    });
+
+    it("starts one with someone, without remembering it", async () => {
+        const { widget: element, server } = await widget({
+            with: ` ${BOT.id}  `,
+        });
+        await element.open();
+        const created = server.received.find((r) =>
+            r.path.endsWith("/createRoom"),
+        );
+        expect(created.body.invite).toEqual([BOT.id]);
+        expect(created.body.initial_state).toEqual([]);
+        expect(window.localStorage.length).toBe(0);
+    });
+
+    it("shows the one it's given, or the one it remembers", async () => {
+        const rooms = [
+            [
+                { id: "!given:demo", members: [ME.id] },
+                [{ sender: ME.id, content: says("Before") }],
+            ],
+        ];
+        const { widget: element, server } = await widget(
+            { conversation: "!given:demo" },
+            rooms,
+        );
+        await element.open();
+        expect(
+            element.querySelector("chat-thread").getAttribute("conversation"),
+        ).toBe("!given:demo");
+        expect(
+            server.received.some((r) => r.path.endsWith("/createRoom")),
+        ).toBe(false);
+
+        window.localStorage.setItem(
+            "django-chat-ui:widget:kept",
+            "!given:demo",
+        );
+        const { widget: other } = await widget(
+            { "storage-key": "kept" },
+            rooms,
+        );
+        expect(other.conversation).toBe("!given:demo");
+    });
+
+    it("works without storage, and when it can't start one", async () => {
+        vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+            throw new Error("blocked");
+        });
+        vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+            throw new Error("blocked");
+        });
+        const { widget: element, client } = await widget({
+            "storage-key": "s",
+        });
+        expect(element.conversation).toBe(null);
+        await element.open();
+        expect(element.conversation).toMatch(/^!/);
+
+        const { widget: failing, client: other } = await widget();
+        vi.spyOn(other, "createRoom").mockRejectedValue(new Error("offline"));
+        const opened = vi.fn();
+        failing.addEventListener("open", opened);
+        await failing.open();
+        expect(opened).not.toHaveBeenCalled();
+        expect(
+            failing.querySelector("chat-thread").hasAttribute("conversation"),
+        ).toBe(false);
+        expect(client).not.toBe(other);
+    });
+
+    it("can have its client before it's in the page, and another later", async () => {
+        const { client } = await setup();
+        const { client: other } = await setup();
+        const element = document.createElement("chat-widget");
+        element.client = client;
+        document.body.append(element);
+        expect(element.querySelector("chat-thread").client).toBe(client);
+        element.client = other;
+        expect(element.querySelector("chat-thread").client).toBe(other);
+        // The launcher closes it too.
+        const launcher = element.querySelector(".chat-widget-launcher");
+        launcher.click();
+        await flush();
+        launcher.click();
+        expect(element.isOpen).toBe(false);
+    });
+
+    it("takes its texts and attributes, before or after it's in the page", async () => {
+        const element = document.createElement("chat-widget");
+        element.texts = { open: "Escríbenos", send: "Enviar" };
+        element.setAttribute("heading", "Ayuda");
+        element.open = element.open.bind(element);
+        expect(element.texts.close).toBe(WIDGET_TEXTS.close);
+        document.body.append(element);
+        expect(
+            element
+                .querySelector(".chat-widget-launcher")
+                .getAttribute("aria-label"),
+        ).toBe("Escríbenos");
         expect(element.querySelector(".chat-widget-heading").textContent).toBe(
             "Ayuda",
         );
         expect(element.querySelector(".chat-widget-subheading").hidden).toBe(
             true,
         );
-        expect(element.texts.close).toBe(WIDGET_TEXTS.close);
-        expect(element.client).toBeTruthy();
         element.setAttribute("heading", "Soporte");
         expect(element.querySelector(".chat-widget-heading").textContent).toBe(
             "Soporte",
+        );
+        element.texts = { heading: "Chat" };
+        element.removeAttribute("heading");
+        expect(element.querySelector(".chat-widget-heading").textContent).toBe(
+            "Chat",
+        );
+        expect(element.querySelector("chat-thread").texts.heading).toBe("Chat");
+        // Without a client: opens, and starts nothing.
+        await element.open();
+        expect(element.conversation).toBe(null);
+        element.renderBadge();
+        const { client } = await setup();
+        element.client = client;
+        expect(element.client).toBe(client);
+        element.remove();
+        client.dispatchEvent(new Event("conversations"));
+        document.body.append(element);
+        expect(element.querySelectorAll(".chat-widget-launcher")).toHaveLength(
+            1,
         );
     });
 });

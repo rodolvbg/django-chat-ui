@@ -276,8 +276,19 @@ chat-thread[hidden] {
     cursor: default;
 }
 
-.chat-part--fallback {
+.chat-quick {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chat-part--fallback,
+.chat-deleted {
     font-style: italic;
+}
+
+.chat-deleted {
+    color: var(--chat-muted);
 }
 
 .chat-part--unsupported {

@@ -12,7 +12,14 @@ does with ``UserAdmin``:
 
 from django.contrib import admin
 
-from .models import Attachment, Conversation, Membership, Message, Participant
+from .models import (
+    Conversation,
+    Media,
+    Membership,
+    Participant,
+    RoomEvent,
+    StreamEntry,
+)
 
 
 class ParticipantAdmin(admin.ModelAdmin):
@@ -28,11 +35,12 @@ class MembershipInline(admin.TabularInline):
     raw_id_fields = ["participant", "last_read"]
 
 
-class MessageInline(admin.TabularInline):
-    model = Message
+class RoomEventInline(admin.TabularInline):
+    model = RoomEvent
+    fk_name = "conversation"
     extra = 0
-    fields = ["created", "author", "parts", "status"]
-    readonly_fields = ["created", "author", "parts", "status"]
+    fields = ["created", "sender", "type", "content"]
+    readonly_fields = ["created", "sender", "type", "content"]
     can_delete = False
     show_change_link = True
 
@@ -44,8 +52,7 @@ class ConversationAdmin(admin.ModelAdmin):
     list_display = ["__str__", "channel", "state", "updated"]
     list_filter = ["channel", "state"]
     search_fields = ["title"]
-    readonly_fields = ["last_message"]
-    inlines = [MembershipInline, MessageInline]
+    inlines = [MembershipInline, RoomEventInline]
 
 
 def register_models(site: admin.AdminSite) -> None:
@@ -59,14 +66,21 @@ def register_models(site: admin.AdminSite) -> None:
 register_models(admin.site)
 
 
-@admin.register(Message)
-class MessageAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "conversation", "author", "status", "created"]
-    list_filter = ["status", "conversation__channel"]
-    raw_id_fields = ["conversation", "author", "reply_to"]
+@admin.register(RoomEvent)
+class RoomEventAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "type", "conversation", "sender", "created"]
+    list_filter = ["type", "conversation__channel"]
+    raw_id_fields = ["conversation", "sender", "relates_to", "redacted_by"]
 
 
-@admin.register(Attachment)
-class AttachmentAdmin(admin.ModelAdmin):
+@admin.register(Media)
+class MediaAdmin(admin.ModelAdmin):
     list_display = ["name", "conversation", "mime", "size", "created"]
     raw_id_fields = ["conversation", "uploader"]
+
+
+@admin.register(StreamEntry)
+class StreamEntryAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "kind", "type", "conversation", "recipient", "created"]
+    list_filter = ["kind"]
+    raw_id_fields = ["conversation", "recipient", "event"]

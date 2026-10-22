@@ -3,13 +3,13 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from django_chat_ui.models import Event
+from django_chat_ui.models import StreamEntry, Typing
 
 
 class Command(BaseCommand):
     help = (
-        "Delete the events of the stream older than --days (default 7). A "
-        "client away for longer reloads instead of resuming."
+        "Delete what /sync read older than --days (default 7): a client away "
+        "for longer syncs again from nothing. The rooms' events stay."
     )
 
     def add_arguments(self, parser):
@@ -17,5 +17,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, days: float, **options):
         cutoff = timezone.now() - timedelta(days=days)
-        deleted, _ = Event.objects.filter(created__lt=cutoff).delete()
-        self.stdout.write(f"{deleted} events deleted.")
+        deleted, _ = StreamEntry.objects.filter(created__lt=cutoff).delete()
+        Typing.objects.filter(until__lt=timezone.now()).delete()
+        self.stdout.write(f"{deleted} entries deleted.")

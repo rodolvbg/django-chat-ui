@@ -32,6 +32,7 @@ THREAD = {
     "log": pgettext_lazy("chat", "Messages"),
     "react": pgettext_lazy("chat", "React"),
     "you": pgettext_lazy("chat", "You"),
+    "deleted": pgettext_lazy("chat", "Message deleted"),
 }
 
 INBOX = {

@@ -5,7 +5,7 @@
  * the other, with a way back to the list.
  *
  *   <chat-inbox></chat-inbox>
- *   inbox.client = client;       // a ChatClient; then client.connect()
+ *   inbox.client = client;       // a ChatClient; then client.start()
  *
  * Properties: client, texts (merged over INBOX_TEXTS), selected (the
  * conversation id shown). Dispatches "select" (detail: { conversation }).
@@ -13,6 +13,7 @@
 
 import "./chat-thread.js";
 import { element, format } from "./dom.js";
+import { BUTTONS, CARD, CONTACT } from "./matrix.js";
 
 export const INBOX_TEXTS = {
     search: "Search conversations",
@@ -39,17 +40,36 @@ function plain(markdown) {
         .trim();
 }
 
+const KINDS = {
+    "m.image": "image",
+    "m.video": "video",
+    "m.audio": "audio",
+    "m.location": "location",
+};
+
 /** One line saying what a message is about, for the list. */
 export function preview(message, texts) {
-    const part = message?.parts?.[0];
-    if (!part) return "";
-    if (part.type === "text" && part.format === "markdown") {
-        return plain(part.text ?? "");
+    if (!message) return "";
+    if (message.redacted) return texts.deleted ?? "";
+    const content = message.content ?? {};
+    if (content.markdown) return plain(content.body ?? "");
+    if (content[BUTTONS]) return content[BUTTONS].body ?? "";
+    if (
+        content.msgtype === "m.audio" &&
+        "org.matrix.msc3245.voice" in content
+    ) {
+        return texts.voice;
     }
-    if (part.type === "text" || part.type === "system") return part.text ?? "";
-    if (part.type === "file") return part.name ?? part.fallback ?? "";
-    if (part.type === "audio" && part.voice) return texts.voice;
-    return texts[part.type] ?? part.fallback ?? "";
+    const kind = KINDS[content.msgtype];
+    if (kind) return texts[kind];
+    if (content.msgtype === "m.file")
+        return content.filename ?? content.body ?? "";
+    if (content.msgtype === CARD)
+        return content[CARD]?.title ?? content.body ?? "";
+    if (content.msgtype === CONTACT) return content[CONTACT]?.name ?? "";
+    return String(content.body ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
 function initials(name) {
@@ -65,7 +85,6 @@ export class ChatInbox extends HTMLElement {
     constructor() {
         super();
         this._client = null;
-        this._uploader = null;
         this._texts = INBOX_TEXTS;
         this._selected = null;
         this.query = "";
@@ -83,16 +102,6 @@ export class ChatInbox extends HTMLElement {
         client.addEventListener("ready", this.onChange);
         if (this.thread) this.thread.client = client;
         this.render();
-    }
-
-    /** The uploader of its thread (see <chat-thread>). */
-    get uploader() {
-        return this._uploader;
-    }
-
-    set uploader(uploader) {
-        this._uploader = uploader;
-        if (this.thread) this.thread.uploader = uploader;
     }
 
     get texts() {
@@ -158,7 +167,6 @@ export class ChatInbox extends HTMLElement {
         this.placeholder = element("p", "chat-inbox-pick");
         this.thread = document.createElement("chat-thread");
         if (this._client) this.thread.client = this._client;
-        if (this._uploader) this.thread.uploader = this._uploader;
         if (this._selected)
             this.thread.setAttribute("conversation", this._selected);
         pane.append(header, this.placeholder, this.thread);
@@ -183,10 +191,7 @@ export class ChatInbox extends HTMLElement {
             const conversation = store.conversation;
             const haystack = [
                 conversation.title,
-                ...(conversation.participants ?? []).flatMap((p) => [
-                    p.name,
-                    p.handle,
-                ]),
+                ...conversation.participants.flatMap((p) => [p.name, p.handle]),
                 preview(store.lastMessage, this._texts),
             ]
                 .filter(Boolean)
@@ -214,28 +219,27 @@ export class ChatInbox extends HTMLElement {
         this.empty.hidden = stores.length > 0;
 
         const current =
-            this._selected && this._client?.stores.get(this._selected);
+            this._selected && this._client?.rooms.get(this._selected);
         this.shell.classList.toggle("chat-inbox--open", Boolean(current));
         this.placeholder.hidden = Boolean(current);
         this.thread.hidden = !current;
+        if (current) this.thread.markRead(); // Seen now.
         this.heading.textContent = current ? this.title(current) : "";
         this.subheading.textContent = current ? this.subtitle(current) : "";
     }
 
     title(store) {
         const conversation = store.conversation;
-        const me = this._client?.me?.id;
-        const others = (conversation.participants ?? []).filter(
-            (p) => p.id !== me,
-        );
+        const me = this._client?.me;
+        const others = conversation.participants.filter((p) => p.id !== me);
         return conversation.title ?? others.map((p) => p.name).join(", ");
     }
 
     subtitle(store) {
         const conversation = store.conversation;
-        const me = this._client?.me?.id;
+        const me = this._client?.me;
         // How the channel knows whoever is outside (not a bot's handle).
-        const others = (conversation.participants ?? []).filter(
+        const others = conversation.participants.filter(
             (p) => p.id !== me && p.handle && p.kind !== "bot",
         );
         const contact = others.find((p) => p.kind === "contact") ?? others[0];
@@ -266,7 +270,7 @@ export class ChatInbox extends HTMLElement {
         const last = store.lastMessage;
         if (last?.createdAt) {
             const time = element("time", "chat-conversation-time");
-            time.dateTime = last.createdAt;
+            time.dateTime = new Date(last.createdAt).toISOString();
             time.textContent = new Date(last.createdAt).toLocaleTimeString(
                 document.documentElement.lang || undefined,
                 { hour: "2-digit", minute: "2-digit" },
@@ -274,7 +278,7 @@ export class ChatInbox extends HTMLElement {
             top.append(time);
         }
         const bottom = element("span", "chat-conversation-bottom");
-        const mine = last && last.author === this._client?.me?.id;
+        const mine = last && last.sender === this._client?.me;
         bottom.append(
             element(
                 "span",

@@ -1,8 +1,8 @@
 /**
  * <chat-widget>: the floating "contact us" chat of a site — a button that
  * opens a panel with a <chat-thread>. It starts a conversation the first
- * time it's opened (`conversation.open` with `with`), unless given one, and
- * can remember it across visits.
+ * time it's opened (`POST /createRoom`), unless given one, and can remember
+ * it across visits.
  *
  *   <chat-widget heading="Soporte" subheading="Te respondemos en minutos"
  *                channel="web" storage-key="support"></chat-widget>
@@ -10,7 +10,8 @@
  *
  * Attributes:
  *   conversation   an existing conversation to show
- *   with           participant ids to start one with (space-separated)
+ *   with           user IDs to start one with (space-separated; none: the
+ *                  site's support team)
  *   channel        the channel of one it starts
  *   storage-key    remember the conversation it started, in localStorage
  *   heading, subheading   the panel's texts
@@ -51,7 +52,6 @@ export class ChatWidget extends HTMLElement {
     constructor() {
         super();
         this._client = null;
-        this._uploader = null;
         this._texts = WIDGET_TEXTS;
         this.onChange = () => this.renderBadge();
         this.onKey = (event) => {
@@ -75,16 +75,6 @@ export class ChatWidget extends HTMLElement {
         client.addEventListener("conversations", this.onChange);
         if (this.thread) this.thread.client = client;
         this.renderBadge();
-    }
-
-    /** The uploader of its thread (see <chat-thread>). */
-    get uploader() {
-        return this._uploader;
-    }
-
-    set uploader(uploader) {
-        this._uploader = uploader;
-        if (this.thread) this.thread.uploader = uploader;
     }
 
     get texts() {
@@ -154,7 +144,6 @@ export class ChatWidget extends HTMLElement {
         header.append(titles, this.closer);
         this.thread = document.createElement("chat-thread");
         if (this._client) this.thread.client = this._client;
-        if (this._uploader) this.thread.uploader = this._uploader;
         this.panel.append(header, this.thread);
         this.append(this.panel, this.launcher);
     }
@@ -178,8 +167,8 @@ export class ChatWidget extends HTMLElement {
         if (!this.badge) return;
         const id = this.conversation;
         const unread =
-            !this.isOpen && id && this._client?.stores.has(id)
-                ? (this._client.conversation(id).conversation.unread ?? 0)
+            !this.isOpen && id && this._client?.rooms.has(id)
+                ? this._client.room(id).unread
                 : 0;
         this.badge.textContent = unread ? String(unread) : "";
         this.badge.hidden = !unread;
@@ -199,14 +188,14 @@ export class ChatWidget extends HTMLElement {
         this.renderBadge();
         let id = this.conversation;
         if (!id && this._client) {
-            const participants = (this.getAttribute("with") ?? "")
+            const invite = (this.getAttribute("with") ?? "")
                 .split(/\s+/)
                 .filter(Boolean);
             try {
-                id = await this._client.start(
-                    participants,
-                    this.getAttribute("channel") ?? undefined,
-                );
+                id = await this._client.createRoom({
+                    invite,
+                    channel: this.getAttribute("channel") ?? undefined,
+                });
             } catch {
                 return; // Shown as an empty thread; opening again retries.
             }
@@ -214,6 +203,7 @@ export class ChatWidget extends HTMLElement {
             remember(this.getAttribute("storage-key"), id);
         }
         if (id) this.thread.setAttribute("conversation", id);
+        if (this.thread.store) this.thread.markRead(); // Seen now.
         this.dispatchEvent(
             new CustomEvent("open", { detail: { conversation: id } }),
         );

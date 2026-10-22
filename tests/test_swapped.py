@@ -9,9 +9,10 @@ from pathlib import Path
 import pytest
 from django.conf import settings
 
-from django_chat_ui import protocol, services
+from django_chat_ui import content, services
 from django_chat_ui.backend import ChatBackend
-from django_chat_ui.models import Conversation, get_conversation_model
+from django_chat_ui.matrix import CONVERSATION, PARTICIPANT, room_id
+from django_chat_ui.models import Conversation, RoomState, get_conversation_model
 
 ROOT = Path(__file__).parent.parent
 SWAPPED = Conversation._meta.swapped is not None
@@ -29,64 +30,65 @@ def test_the_conversations_are_the_sites(agent, customer, agent_user):
         [agent, customer], channel="whatsapp", priority=2, assignee=agent_user
     )
     assert isinstance(ticket, Ticket)
-    services.post(ticket, customer, [{"type": "text", "text": "Hi"}])
+    services.send(ticket, customer, content.text("Hi"))
 
-    assert [m.parts[0]["text"] for m in ticket.messages.all()] == ["Hi"]
+    assert [m.body for m in ticket.messages] == ["Hi"]
     assert list(ticket.participants) == [agent, customer]
-    assert ticket.last_message["parts"] == [{"type": "text", "text": "Hi"}]
     # The ticket's own table, not the package's.
     assert Ticket._meta.db_table == "helpdesk_ticket"
 
 
+def own_state(conversation, type=CONVERSATION, key=""):
+    return RoomState.objects.get(
+        conversation=conversation, type=type, state_key=key
+    ).event.content
+
+
 @swapped_only
-def test_the_site_sends_its_fields(
-    settings, agent, customer, agent_user, customer_chat
-):
+def test_the_site_sends_its_fields(settings, agent, customer, agent_user, customer_api):
     settings.CHAT_UI = {**settings.CHAT_UI, "BACKEND": "shop.chat.DemoBackend"}
     ticket = services.create_conversation(
         [agent, customer], priority=2, assignee=agent_user, capabilities={}
     )
-    data = protocol.conversation(ticket)
-    assert data["ext"] == {"shop": {"priority": "high", "assignee": "agent"}}
+    shop = {"com.example.shop": {"priority": "high", "assignee": "agent"}}
+    assert own_state(ticket)["ext"] == shop
 
-    [listed] = customer_chat.hello()["conversations"]
-    assert listed["ext"]["shop"]["priority"] == "high"
+    state = customer_api.sync()["rooms"]["join"][room_id(ticket)]["timeline"]["events"]
+    [listed] = [e for e in state if e["type"] == CONVERSATION]
+    assert listed["content"]["ext"] == shop
 
 
 @swapped_only
 def test_an_agent_answering_takes_the_ticket(
-    settings, monkeypatch, agent, agent_chat, customer, agent_user
+    settings, monkeypatch, agent, agent_api, customer, agent_user
 ):
     from helpdesk.models import Ticket
 
     settings.CHAT_UI = {**settings.CHAT_UI, "BACKEND": "shop.chat.DemoBackend"}
     monkeypatch.setattr("shop.chat.DemoBackend.hooks", "inline")
-    ticket = services.create_conversation(
-        [agent, customer], state="pending", capabilities={"composer": {"mode": "free"}}
-    )
-    agent_chat.ok(
-        "message.send",
-        {
-            "conversation": str(ticket.pk),
-            "clientId": "c",
-            "parts": [{"type": "text", "text": "Hi"}],
-        },
-    )
+    ticket = services.create_conversation([agent, customer], state="pending")
+    agent_api.sent(room_id(ticket), {"msgtype": "m.text", "body": "Hi"})
     assert Ticket.objects.get(pk=ticket.pk).assignee == agent_user
 
 
-def test_a_site_adds_fields_to_what_is_sent(settings, conversation, agent):
+def test_a_site_adds_fields_to_what_is_sent(settings, agent, customer):
     settings.CHAT_UI = {**settings.CHAT_UI, "BACKEND": "tests.test_swapped.CrmBackend"}
-    assert protocol.participant(agent)["ext"] == {"crm": {"id": f"P-{agent.pk}"}}
-    assert protocol.conversation(conversation)["meta"] == {"queue": "sales"}
+    conversation = services.create_conversation([agent, customer], ext={"x": 1})
+    member = own_state(conversation, "m.room.member", f"@p{agent.pk}:localhost")
+    assert member[PARTICIPANT]["ext"] == {"com.crm": {"id": f"P-{agent.pk}"}}
+    assert own_state(conversation) == {
+        "channel": "web",
+        "state": "open",
+        "ext": {"x": 1, "com.crm": {"queue": "sales"}},
+    }
 
 
 class CrmBackend(ChatBackend):
     def serialize_participant(self, participant, data):
-        return {**data, "ext": {"crm": {"id": f"P-{participant.pk}"}}}
+        return {**data, "ext": {"com.crm": {"id": f"P-{participant.pk}"}}}
 
     def serialize_conversation(self, conversation, data):
-        return {**data, "meta": {"queue": "sales"}}
+        return {**data, "ext": {**data.get("ext", {}), "com.crm": {"queue": "sales"}}}
 
 
 @pytest.mark.parametrize("module", ["tests.settings", "tests.settings_swapped"])

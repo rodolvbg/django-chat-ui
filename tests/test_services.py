@@ -1,285 +1,323 @@
-"""The services: the change, and the events every interface gets."""
+"""The API of integrations: each change, its room events and its entries."""
 
 import pytest
 
-from django_chat_ui import protocol, services
-from django_chat_ui.models import Event, Membership, get_participant_model
-
-Participant = get_participant_model()
+from django_chat_ui import content, services
+from django_chat_ui.matrix import (
+    CAPABILITIES,
+    CONVERSATION,
+    DELIVERED,
+    PARTICIPANT,
+    STATUS,
+    STREAM,
+)
+from django_chat_ui.models import (
+    Media,
+    Membership,
+    Receipt,
+    RoomEvent,
+    RoomState,
+    StreamEntry,
+    Typing,
+    get_participant_model,
+)
 
 pytestmark = pytest.mark.django_db
 
 
-def text(value):
-    return [{"type": "text", "text": value}]
+def state(conversation, type, key=""):
+    return RoomState.objects.get(
+        conversation=conversation, type=type, state_key=key
+    ).event
 
 
-def events(after):
-    return list(Event.objects.filter(id__gt=after).order_by("id"))
-
-
-def test_create_conversation_tells_each_participant(agent, customer, seq):
+def test_a_new_room_and_its_state(agent, customer):
     conversation = services.create_conversation(
-        [agent, customer, agent], channel="whatsapp", title="Ana", state="pending"
+        [agent, customer, agent],
+        channel="whatsapp",
+        title="Ana",
+        ext={"com.acme": {"id": 1}},
+        meta={"crm": 9},
+        capabilities={"typing": True},
     )
-    created = events(seq)
-    assert [(e.type, e.recipient) for e in created] == [
-        ("conversation.created", agent),
-        ("conversation.created", customer),
+    types = list(conversation.events.values_list("type", flat=True))
+    assert types == [
+        "m.room.create",
+        "m.room.member",
+        "m.room.member",
+        "m.room.power_levels",
+        "m.room.join_rules",
+        "m.room.history_visibility",
+        "m.room.name",
+        CONVERSATION,
+        CAPABILITIES,
     ]
-    assert created[0].data["unread"] == 0
-    assert created[0].data["title"] == "Ana"
-    assert conversation.memberships.count() == 2
+    assert state(conversation, "m.room.name").content == {"name": "Ana"}
+    assert state(conversation, CONVERSATION).content == {
+        "channel": "whatsapp",
+        "state": "open",
+        "ext": {"com.acme": {"id": 1}},
+    }
+    member = state(conversation, "m.room.member", f"@p{customer.pk}:localhost")
+    assert member.content == {
+        "membership": "join",
+        "displayname": "Ana",
+        PARTICIPANT: {"kind": "user"},
+    }
+    assert member.sender == customer
+    assert list(conversation.participants) == [agent, customer]
+    joins = StreamEntry.objects.filter(kind="join")
+    assert {e.recipient for e in joins} == {agent, customer}
 
 
-def test_post_updates_the_lists(agent, customer, conversation, seq):
-    message = services.post(conversation, agent, text("Hola"), client_id="c_1")
-
-    created, *updates = events(seq)
-    assert created.type == "message.created"
-    assert created.recipient is None
-    assert created.data["clientId"] == "c_1"
-    assert created.data["status"] == "sent"
-    by = {e.recipient: e.data for e in updates}
-    assert "unread" not in by[agent]
-    assert by[customer]["unread"] == 1
-    assert by[customer]["lastMessage"]["id"] == str(message.pk)
-    conversation.refresh_from_db()
-    assert conversation.last_message["id"] == str(message.pk)
-    assert conversation.updated == message.created
+def test_a_participant_without_a_name(conversation):
+    nameless = get_participant_model().objects.create()
+    services.add_participant(conversation, nameless)
+    member = state(conversation, "m.room.member", f"@p{nameless.pk}:localhost")
+    assert member.content == {"membership": "join", PARTICIPANT: {"kind": "user"}}
+    assert str(nameless) == f"user {nameless.pk}"
 
 
-def test_system_messages_have_no_author(conversation, seq):
-    message = services.system(conversation, "Ana joined", code="joined")
-    assert message.author is None
-    assert message.parts == [{"type": "system", "text": "Ana joined", "code": "joined"}]
-    assert "author" not in events(seq)[0].data
-    assert services.system(conversation, "Closed").parts == [
-        {"type": "system", "text": "Closed"}
-    ]
-
-
-def test_add_and_remove_participants(agent, customer, conversation, seq):
-    bot = Participant.objects.create(kind="bot", name="Bot")
+def test_participants_join_and_leave(conversation, agent, customer):
+    bot = get_participant_model().objects.create(kind="bot", name="Bot", handle="b")
     services.add_participant(conversation, bot)
-    services.add_participant(conversation, bot)  # Already there: nothing.
+    services.add_participant(conversation, bot)  # Already in: nothing.
+    assert conversation.participants.count() == 3
+    assert StreamEntry.objects.filter(kind="join", recipient=bot).count() == 1
+    joined = state(conversation, "m.room.member", f"@p{bot.pk}:localhost")
+    assert joined.content[PARTICIPANT] == {"kind": "bot", "handle": "b"}
 
-    kinds = [(e.type, e.recipient) for e in events(seq)]
-    assert ("conversation.created", bot) in kinds
-    assert kinds.count(("conversation.created", bot)) == 1
-    assert ("conversation.updated", agent) in kinds
-
-    seq = events(0)[-1].pk
+    services.typing(conversation, bot, True)
     services.remove_participant(conversation, bot)
-    services.remove_participant(conversation, bot)
-    assert [(e.type, e.recipient) for e in events(seq)] == [
-        ("conversation.removed", bot),
-        ("conversation.updated", agent),
-        ("conversation.updated", customer),
-    ]
+    services.remove_participant(conversation, bot)  # Gone already.
+    left = state(conversation, "m.room.member", f"@p{bot.pk}:localhost")
+    assert left.content["membership"] == "leave"
+    entry = StreamEntry.objects.get(kind="leave")
+    assert (entry.recipient, entry.event) == (bot, left)
+    assert not Typing.objects.filter(participant=bot).exists()
 
 
-def test_update_conversation_merges_capabilities(conversation, seq):
-    services.update_conversation(
-        conversation, capabilities={"typing": False}, state="closed"
-    )
-    conversation.refresh_from_db()
-    assert conversation.capabilities["typing"] is False
-    assert conversation.capabilities["receipts"] is True
-    assert conversation.state == "closed"
-    [event] = events(seq)
-    assert event.data["capabilities"] == {"typing": False}
-    assert event.data["state"] == "closed"
-
+def test_update_conversation(conversation):
+    services.update_conversation(conversation, title="New", state="closed")
+    services.update_conversation(conversation, capabilities={"typing": False})
+    services.update_conversation(conversation, meta={"secret": 1})
+    assert state(conversation, "m.room.name").content == {"name": "New"}
+    assert state(conversation, CONVERSATION).content["state"] == "closed"
+    caps = state(conversation, CAPABILITIES).content
+    assert caps["typing"] is False and caps["reactions"] is True
+    # meta: the server's only.
+    assert conversation.meta == {"secret": 1}
+    assert "secret" not in str(conversation.events.values_list("content", flat=True))
     with pytest.raises(TypeError):
         services.update_conversation(conversation, channel="sms")
 
 
-def test_update_message(agent, conversation, seq):
-    message = services.post(conversation, agent, text("Hola"))
-    seq = events(seq)[-1].pk
-    services.update_message(message, status="delivered", meta={"wa": "wamid.1"})
+def test_send_counts_unread_and_stops_typing(conversation, agent, customer):
+    services.typing(conversation, agent, True)
+    message = services.send(conversation, agent, content.text("Hi"))
+    assert message.body == "Hi"
+    assert str(message) == "Hi"
+    assert message.event_id == f"${message.pk}"
+    unread = dict(Membership.objects.values_list("participant", "unread"))
+    assert unread == {agent.pk: 0, customer.pk: 1}
+    assert StreamEntry.objects.filter(kind="unread", recipient=customer).exists()
+    assert not Typing.objects.exists()
+    typing = StreamEntry.objects.filter(type="m.typing").last()
+    assert typing.data == {"user_ids": []}
+    # A system notice: the server's.
+    notice = services.system(conversation, "Ana joined", code="joined")
+    assert notice.sender is None
+    assert list(conversation.messages) == [message, notice]
 
-    [event] = events(seq)
-    assert event.data == {
-        "id": str(message.pk),
-        "conversation": str(conversation.pk),
-        "status": "delivered",
-        "meta": {"wa": "wamid.1"},
+
+def test_the_files_a_message_shows_become_the_conversations(conversation, agent):
+    media = Media.objects.create(uploader=agent, name="a.png", mime="image/png", size=1)
+    thumb = Media.objects.create(uploader=agent, name="t.png", mime="image/png", size=1)
+    services.send(
+        conversation,
+        agent,
+        {
+            "msgtype": "m.image",
+            "body": "a",
+            "url": f"mxc://localhost/{media.media_id}",
+            "info": {"thumbnail_url": f"mxc://localhost/{thumb.media_id}"},
+        },
+    )
+    assert set(Media.objects.values_list("conversation", flat=True)) == {
+        conversation.pk
     }
-    services.update_message(message, parts=text("Hola!"))
-    assert "editedAt" in events(event.pk)[0].data
-    with pytest.raises(TypeError):
-        services.update_message(message, author=None)
+    assert str(media) == "a.png"
 
 
-def test_streaming(agent, conversation, seq):
-    message = services.start_stream(conversation, agent)
-    services.delta(message, "Tu pedido ")
-    services.delta(message, "sale hoy.")
-    services.delta(message, "Más", part=1)
-    assert message.parts == [
-        {"type": "text", "text": "Tu pedido sale hoy."},
-        {"type": "text", "text": "Más"},
-    ]
+def test_relations(conversation, agent, customer):
+    message = services.send(conversation, agent, content.text("Hi"))
+    reply = services.send(
+        conversation,
+        customer,
+        {
+            **content.text("Hello"),
+            "m.relates_to": {"m.in_reply_to": {"event_id": message.event_id}},
+        },
+    )
+    assert (reply.relates_to, reply.rel_type) == (message, "m.in_reply_to")
+    unknown = services.send(
+        conversation,
+        customer,
+        {**content.text("?"), "m.relates_to": {"event_id": "$999"}},
+    )
+    assert (unknown.relates_to, unknown.rel_type) == (None, "")
+    nothing = services.send(
+        conversation,
+        customer,
+        {**content.text("?"), "m.relates_to": {"m.in_reply_to": {}}},
+    )
+    assert (nothing.relates_to, nothing.rel_type) == (None, "")
 
-    services.finish(message, text("Final"))
-    message.refresh_from_db()
-    assert message.streaming is False
-    assert message.edited is None
-    assert message.parts == text("Final")
-
-    kinds = [e.type for e in events(seq) if e.recipient is None]
-    assert kinds == [
-        "message.created",
-        "message.delta",
-        "message.delta",
-        "message.delta",
-        "message.updated",
-        "conversation.updated",
-    ]
-    assert events(seq)[0].data["streaming"] is True
-
-    # Lists learn its final text (it was created empty).
-    [listed] = [
-        e
-        for e in events(seq)
-        if e.type == "conversation.updated" and e.recipient is None
-    ]
-    assert listed.data["lastMessage"]["parts"] == text("Final")
-
-    other = services.start_stream(conversation, agent, text("Hi"))
-    services.finish(other)
-    other.refresh_from_db()
-    assert other.parts == text("Hi")
+    edit = services.edit(message, content.text("Hi!"))
+    assert edit.sender == agent
+    assert edit.content["m.new_content"] == content.text("Hi!")
+    assert edit.content["body"] == "* Hi!"
+    assert edit.rel_type == "m.replace"
+    # An edit isn't a new message to read.
+    assert Membership.objects.get(participant=customer).unread == 1
 
 
-def test_read_without_receipts_leaves_statuses(agent, customer, conversation):
-    services.update_conversation(conversation, capabilities={"receipts": False})
-    message = services.post(conversation, agent, text("Hola"))
-    services.read(conversation, customer, message)
-    message.refresh_from_db()
-    assert message.status == "sent"
-    assert (
-        Membership.objects.get(conversation=conversation, participant=customer).unread
-        == 0
+def test_reactions(conversation, agent, customer):
+    message = services.send(conversation, agent, content.text("Hi"))
+    services.react(message, customer, "👍")
+    services.react(message, agent, "👍")
+    services.react(message, agent, "🎉")
+    assert services.reactions(message) == {"👍": [customer, agent], "🎉": [agent]}
+    services.unreact(message, agent, "👍")
+    assert services.reactions(message) == {"👍": [customer], "🎉": [agent]}
+    assert str(RoomEvent.objects.filter(type="m.reaction").first()) == (
+        f"m.reaction {RoomEvent.objects.filter(type='m.reaction').first().pk}"
     )
 
 
-def test_emit_an_extension_event(conversation, seq):
-    services.emit("acme.order.updated", {"id": "A-1"}, conversation=conversation)
-    assert events(seq)[0].frame() == {
-        "type": "acme.order.updated",
-        "seq": seq + 1,
-        "data": {"id": "A-1"},
+def test_redact(conversation, agent):
+    message = services.send(conversation, agent, content.text("Hi"))
+    redaction = services.redact(message)
+    message.refresh_from_db()
+    assert message.content == {}
+    assert message.redacted_by == redaction
+    assert redaction.sender == agent
+    assert redaction.content == {"redacts": message.event_id}
+
+
+def test_receipts_and_unread(conversation, agent, customer):
+    first = services.send(conversation, agent, content.text("1"))
+    services.send(conversation, agent, content.text("2"))
+    services.read(conversation, customer, first)
+    membership = Membership.objects.get(participant=customer)
+    assert (membership.unread, membership.last_read) == (1, first)
+    receipt = StreamEntry.objects.filter(type="m.receipt").last()
+    assert list(receipt.data) == [first.event_id]
+    assert f"@p{customer.pk}:localhost" in receipt.data[first.event_id]["m.read"]
+
+    # Private: their count, nothing for the others.
+    entries = StreamEntry.objects.count()
+    services.read(conversation, customer, conversation.messages.last(), public=False)
+    assert Membership.objects.get(participant=customer).unread == 0
+    assert StreamEntry.objects.count() == entries + 1  # Only their unread.
+    assert Receipt.objects.get(participant=customer).event == first
+
+    services.delivered(first, customer)
+    assert Receipt.objects.filter(type=DELIVERED).get().event == first
+
+
+def test_status(conversation, agent):
+    message = services.send(conversation, agent, content.text("Hi"))
+    services.status(message, "failed", {"errcode": "X", "error": "Blocked"})
+    message.refresh_from_db()
+    assert message.unsigned[STATUS] == {
+        "status": "failed",
+        "error": {"errcode": "X", "error": "Blocked"},
+    }
+    entry = StreamEntry.objects.filter(type=STATUS).get()
+    assert entry.data["event_id"] == message.event_id
+    services.status(message, "sent")
+    assert StreamEntry.objects.filter(type=STATUS).last().data == {
+        "event_id": message.event_id,
+        "status": "sent",
     }
 
 
-def test_protocol_shapes(agent, conversation):
-    agent.avatar = "https://example.com/a.png"
-    agent.ext = {"acme": {"level": 2}}
-    message = services.post(conversation, agent, text("Hi"))
-    services.update_message(
-        message, reactions=[{"emoji": "👍", "by": ["1"]}], deleted=True
-    )
-    message.refresh_from_db()
-    assert protocol.participant(agent)["ext"] == {"acme": {"level": 2}}
-    data = protocol.message(message)
-    assert data["deleted"] is True
-    assert data["reactions"] == [{"emoji": "👍", "by": ["1"]}]
-    assert data["createdAt"].endswith("Z")
-    assert len(data["createdAt"]) == len("2026-10-20T10:00:00.000Z")
-    assert protocol.timestamp(None) is None
-    assert "participants" not in protocol.conversation(conversation, participants=False)
-    assert "unread" not in protocol.conversation(conversation)
+def test_typing_expires(conversation, agent):
+    services.typing(conversation, agent, True, timeout=0)
+    assert StreamEntry.objects.filter(type="m.typing").last().data == {"user_ids": []}
+    services.typing(conversation, agent, True)
+    assert StreamEntry.objects.filter(type="m.typing").last().data == {
+        "user_ids": [f"@p{agent.pk}:localhost"]
+    }
+    services.typing(conversation, agent, False)
+    assert not Typing.objects.exists()
 
 
-@pytest.mark.parametrize(
-    "name, expected",
-    [
-        ("acme.order", True),
-        ("message.created", False),
-        ("text", False),
-        ("Acme.x", False),
-        (5, False),
-    ],
-)
-def test_namespaces(name, expected):
-    assert protocol.is_namespaced(name) is expected
+class Clock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
 
 
-def test_strings(agent, conversation):
-    message = services.post(conversation, agent, text("Hola"))
-    assert str(message) == "Hola"
-    assert str(
-        services.post(conversation, agent, [{"type": "image", "url": "/x"}])
-    ).startswith("message ")
-    assert str(conversation) == f"web {conversation.pk}"
-    assert str(agent) == "Rodolfo"
-    assert str(Participant(kind="bot", pk=3)) == "bot 3"
-    assert str(conversation.memberships.first()) == f"Rodolfo · web {conversation.pk}"
-    assert str(Event.objects.first()).endswith("conversation.created")
+def streamed(conversation):
+    return list(StreamEntry.objects.filter(type=STREAM).values_list("data", flat=True))
 
 
-def test_errors_without_a_message():
-    error = protocol.ProtocolError("internal", retry=True)
-    assert error.data() == {"code": "internal", "retry": True}
-    assert str(error) == "internal"
+def test_stream_text(conversation, agent):
+    clock = Clock()
 
+    def chunks():
+        yield "Your "
+        clock.now = 1
+        yield "order "
+        clock.now = 2
+        yield ""  # Time passed, nothing new to show.
+        yield "ships."
 
-def deltas(after):
-    return [e.data["text"] for e in events(after) if e.type == "message.delta"]
-
-
-def test_stream_text_sends_the_chunks_together(agent, conversation, seq):
     message = services.stream_text(
-        conversation, agent, iter(["ab", "cd", "ef", "g"]), size=5, every=60
+        conversation, agent, chunks(), clock=clock, buttons=[{"id": "a", "label": "OK"}]
     )
-    # 4 letters wait; 6 go; what's left goes at the end.
-    assert deltas(seq) == ["abcdef", "g"]
-    message.refresh_from_db()
-    assert message.streaming is False
-    assert message.parts == [{"type": "text", "text": "abcdefg", "format": "markdown"}]
+    [shown] = streamed(conversation)
+    assert shown["body"] == "Your order "
+    assert shown["markdown"] is True
+    assert shown["sender"] == f"@p{agent.pk}:localhost"
+    assert message.content[STREAM] == {"id": shown["id"]}
+    assert message.content["formatted_body"].startswith("<p>Your order ships.</p>")
+    assert message.content["io.github.rodolvbg.chat.buttons"]["buttons"]
+    # The author was typing meanwhile; their message stopped it.
+    typing = StreamEntry.objects.filter(type="m.typing")
+    assert [e.data["user_ids"] for e in typing] == [[f"@p{agent.pk}:localhost"], []]
 
 
-def test_stream_text_sends_them_in_time(agent, conversation, seq):
-    # The clock: when it starts, at each chunk, and when it sends.
-    times = iter([0, 0.05, 0.2, 0.2, 0.25, 0.4, 0.4, 0.4])
-    services.stream_text(
-        conversation, agent, ["a", "b", "c", "d"], every=0.1, clock=lambda: next(times)
-    )
-    # Started at 0: "a" at 0.05 waits, "b" at 0.2 goes with it, "c" at 0.25
-    # waits, "d" at 0.4 goes with it.
-    assert deltas(seq) == ["ab", "cd"]
-
-
-def test_stream_text_then_more_parts(agent, conversation):
-    buttons = {"type": "buttons", "buttons": [{"id": "y", "label": "Yes"}]}
+def test_stream_text_by_size_and_plain(conversation, agent):
     message = services.stream_text(
-        conversation, agent, ["Shall I?"], markdown=False, then=[buttons]
+        conversation, agent, iter(["ab", "cd", "e"]), markdown=False, size=4, every=99
     )
-    assert message.parts == [{"type": "text", "text": "Shall I?"}, buttons]
+    assert [d["body"] for d in streamed(conversation)] == ["abcd"]
+    assert "markdown" not in streamed(conversation)[0]
+    assert message.content == {
+        "msgtype": "m.text",
+        "body": "abcde",
+        STREAM: message.content[STREAM],
+    }
 
 
-def test_stream_text_finishes_when_the_chunks_fail(agent, conversation, seq):
-    def broken():
-        yield "Your order "
-        raise ConnectionError("the model went away")
+def test_stream_text_that_fails_sends_what_came(conversation, agent):
+    def chunks():
+        yield "Half"
+        raise RuntimeError("cut")
 
-    with pytest.raises(ConnectionError):
-        services.stream_text(conversation, agent, broken(), size=1)
+    with pytest.raises(RuntimeError):
+        services.stream_text(conversation, agent, chunks(), every=99)
+    assert conversation.messages.get().content["body"] == "Half"
 
-    message = conversation.messages.get()
-    assert message.streaming is False
-    assert message.parts == [
-        {"type": "text", "text": "Your order ", "format": "markdown"}
-    ]
 
-    # Nothing came at all: no text part.
-    def nothing():
-        raise ConnectionError
-        yield  # pragma: no cover
-
-    with pytest.raises(ConnectionError):
-        services.stream_text(conversation, agent, nothing())
-    assert conversation.messages.last().parts == []
+def test_stream_text_with_nothing(conversation, agent):
+    assert services.stream_text(conversation, agent, iter([])) is None
+    [done] = streamed(conversation)
+    assert done["done"] is True
+    assert not conversation.messages.exists()
+    assert not Typing.objects.exists()

@@ -7,52 +7,79 @@ from django.contrib.auth.models import User
 
 from django_chat_ui import services
 from django_chat_ui.backend import get_backend
+from django_chat_ui.matrix import room_id, user_id
 
 # pytest-playwright's sync API runs on a greenlet bridge to an asyncio loop,
 # which makes Django's async-safety check think the database is used from
 # async code. Nothing here is concurrent: the documented escape hatch.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "1")
 
-ids = itertools.count(1)
+BASE = "/chat/_matrix/client/v3"
+txns = itertools.count(1)
 
 
-class Chat:
-    """Speaks the protocol through Django's test client, as one participant."""
+class Api:
+    """Speaks the Matrix Client-Server API through Django's test client, as
+    one participant."""
 
-    def __init__(self, client):
+    def __init__(self, client, participant=None):
         self.client = client
+        self.participant = participant
 
-    def post(self, frames):
-        return self.client.post(
-            "/chat/commands", json.dumps(frames), content_type="application/json"
+    @property
+    def me(self):
+        return user_id(self.participant)
+
+    def call(self, method, path, body=None, **params):
+        url = path if path.startswith("/chat/") else BASE + path
+        if method == "GET":
+            return self.client.get(url, params)
+        if params:
+            from urllib.parse import urlencode
+
+            url = f"{url}?{urlencode(params)}"
+        return getattr(self.client, method.lower())(
+            url,
+            json.dumps(body if body is not None else {}),
+            content_type="application/json",
         )
 
-    def __call__(self, type, data=None, **extra):
-        frame = {"type": type, "id": f"cmd_{next(ids)}", "data": data or {}, **extra}
-        response = self.post(frame)
+    def ok(self, method, path, body=None, **params):
+        response = self.call(method, path, body, **params)
         assert response.status_code == 200, response.content
         return response.json()
 
-    def ok(self, type, data=None):
-        """The answers of a command that must succeed (ending in its ack)."""
-        frames = self(type, data)
-        assert frames[-1]["type"] in {"ack", "ready"}, frames
-        return frames
+    def error(self, method, path, body=None, status=None, **params):
+        response = self.call(method, path, body, **params)
+        assert response.status_code >= 400, response.content
+        if status is not None:
+            assert response.status_code == status, response.content
+        return response.json()["errcode"]
 
-    def error(self, type, data=None):
-        """The error of a command that must fail."""
-        [frame] = self(type, data)
-        assert frame["type"] == "error", frame
-        return frame["data"]
+    def send(self, room, content, type="m.room.message", txn=None):
+        txn = txn or f"t{next(txns)}"
+        return self.call("PUT", f"/rooms/{room}/send/{type}/{txn}", content)
 
-    def hello(self, **data):
-        [ready] = self.ok("hello", {"protocol": ["1.0"], **data})
-        return ready["data"]
+    def sent(self, room, content, type="m.room.message", txn=None):
+        """The event ID of what must be sent."""
+        response = self.send(room, content, type, txn)
+        assert response.status_code == 200, response.content
+        return response.json()["event_id"]
 
-    def events(self, after):
-        response = self.client.get("/chat/events", {"after": after})
-        assert response.status_code == 200
-        return response.json()
+    def refused(self, room, content, type="m.room.message"):
+        """The errcode of what must not be sent."""
+        response = self.send(room, content, type)
+        assert response.status_code >= 400, response.content
+        return response.json()["errcode"]
+
+    def sync(self, since=None, **params):
+        if since is not None:
+            params["since"] = since
+        return self.ok("GET", "/sync", **params)
+
+
+def text(body):
+    return {"msgtype": "m.text", "body": body}
 
 
 @pytest.fixture
@@ -78,18 +105,18 @@ def customer(customer_user):
 
 
 @pytest.fixture
-def agent_chat(client, agent_user, agent):
+def agent_api(client, agent_user, agent):
     client.force_login(agent_user)
-    return Chat(client)
+    return Api(client, agent)
 
 
 @pytest.fixture
-def customer_chat(customer_user, customer):
+def customer_api(customer_user, customer):
     from django.test import Client
 
     client = Client()
     client.force_login(customer_user)
-    return Chat(client)
+    return Api(client, customer)
 
 
 CAPABILITIES = {
@@ -114,9 +141,5 @@ def conversation(agent, customer):
 
 
 @pytest.fixture
-def seq(db):
-    """The last seq now: what comes after it is what a test caused."""
-    from django_chat_ui.models import Event
-
-    last = Event.objects.order_by("-id").values_list("id", flat=True).first()
-    return last or 0
+def room(conversation):
+    return room_id(conversation)

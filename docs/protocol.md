@@ -1,669 +1,408 @@
-# Chat UI protocol — version 1.0 (draft)
+# django-chat-ui on Matrix — profile 1.0
 
-A small contract between a chat interface and whatever serves its
-conversations: WhatsApp, a chatbot, a company's internal chat, a "contact
-us" widget, or anything else. The interface only speaks this protocol;
-each backend translates its channel to it. The protocol is a **base**:
-everything in it is designed to be extended by whoever adopts it, without
-forking it and without breaking other clients.
+django-chat-ui speaks [Matrix](https://spec.matrix.org/v1.11/client-server-api/):
+its web components are Matrix clients, and its Django app is a Matrix
+homeserver (without federation nor end-to-end encryption). A Matrix client
+or bot — the tests run [matrix-js-sdk](https://github.com/matrix-org/matrix-js-sdk)
+against it — can use a site that has it, and the components can use other
+homeservers.
 
-The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be
-read as in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
+What a business chat needs and Matrix doesn't have (quick replies, cards,
+WhatsApp's templates and 24-hour window, AI answers written as they come,
+what each conversation allows) are **extensions**, in Matrix's own way:
+namespaced under `io.github.rodolvbg.chat`, always with a fallback that any
+other client shows. A site adds its own the same way (section 9).
+
+The key words MUST, MUST NOT, SHOULD and MAY are to be read as in
+[RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
 ## Contents
 
 1. [Concepts](#1-concepts)
-2. [Conventions](#2-conventions)
-3. [Extensibility](#3-extensibility)
-4. [Data types](#4-data-types)
-5. [Parts](#5-parts)
-6. [Capabilities](#6-capabilities)
-7. [Frames, events and commands](#7-frames-events-and-commands)
-8. [Session: hello and resume](#8-session-hello-and-resume)
-9. [History](#9-history)
-10. [Transports](#10-transports)
-11. [Security](#11-security)
-12. [Extending the protocol](#12-extending-the-protocol)
-13. [Examples](#13-examples)
+2. [Identifiers and sessions](#2-identifiers-and-sessions)
+3. [The API served](#3-the-api-served)
+4. [Room state](#4-room-state)
+5. [Messages](#5-messages)
+6. [Ephemeral events](#6-ephemeral-events)
+7. [AI answers, as they're written](#7-ai-answers-as-theyre-written)
+8. [What clients may send](#8-what-clients-may-send)
+9. [Extending it](#9-extending-it)
+10. [WhatsApp, and other channels](#10-whatsapp-and-other-channels)
+11. [Examples](#11-examples)
 
 ## 1. Concepts
 
-| Term | Meaning |
+| django-chat-ui | Matrix |
 |---|---|
-| **Conversation** | A thread of messages between participants, on one channel. |
-| **Participant** | Someone or something taking part: a user, an agent, a bot, an external contact, the system. |
-| **Message** | One entry of a conversation, made of **parts**. |
-| **Part** | A piece of content: text, an image, buttons, a card… |
-| **Channel** | Where a conversation lives (`whatsapp`, `bot`, `internal`, `web`…). The interface doesn't depend on it: it reads the conversation's **capabilities**. |
-| **Capabilities** | What a conversation allows (receipts, attachments, streaming…), and what a client can render. |
-| **Event** | Server → client: something happened (`message.created`, `typing`…). |
-| **Command** | Client → server: do something (`message.send`, `message.read`…). |
-| **Transport** | How frames travel (SSE + HTTP, WebSocket, polling). Not part of the data model. |
+| Conversation | A room (`!7:example.com`). |
+| Participant (user, agent, bot, contact, system) | A user (`@p3:example.com`), with this package's block in its `m.room.member` (section 4.2). |
+| Message | An `m.room.message` event. |
+| Its kinds of content (text, image, buttons, card…) | Its `msgtype`, and this package's blocks (section 5). |
+| Reactions, edits, replies, deletions | `m.annotation`, `m.replace`, `m.in_reply_to`, redactions. |
+| Read, delivered | Receipts: `m.read`, and this package's `delivered`. |
+| Typing | `m.typing`. |
+| What a conversation allows | This package's `capabilities` state event (section 4.3). |
+| Its channel (WhatsApp, a bot, internal, the web) and state (open, pending, closed) | This package's `conversation` state event (section 4.1). |
+| A message being written (an AI's) | This package's ephemeral `stream` event (section 7). |
+| History, resuming after a disconnection | `/sync` tokens, `/messages`. |
 
-## 2. Conventions
+## 2. Identifiers and sessions
 
-- Frames are JSON objects, UTF-8.
-- Identifiers are opaque **strings** (never numbers): clients MUST NOT
-  parse them.
-- Timestamps are RFC 3339 strings in UTC: `"2026-10-20T10:00:00Z"`.
-- Names of fields are `camelCase`; names of types, events and commands are
-  lowercase, dot-separated (`message.created`).
-- Optional fields MAY be omitted; omitted and `null` mean the same.
-- Text is plain text unless a part says otherwise. **No HTML** anywhere in
-  the protocol (see [Security](#11-security)).
+The server's name is `CHAT_UI["SERVER_NAME"]` (default `localhost`):
 
-## 3. Extensibility
+| | Format | Example |
+|---|---|---|
+| User ID | `@p<participant pk>:<server>` | `@p3:shop.example` |
+| Room ID | `!<conversation pk>:<server>` | `!7:shop.example` |
+| Event ID | `$<pk>` | `$1042` |
+| Media | `mxc://<server>/<media id>` | `mxc://shop.example/k2J…` |
+| The server's own sender (system notices) | `@system:<server>` | |
+| `next_batch` of `/sync` | `s<position>` | `s1300` |
+| `prev_batch`, tokens of `/messages` | `t<event pk>` | `t1001` |
 
-Extensibility follows five rules. They are what lets anyone add things to
-the protocol while every other client keeps working.
+Clients MUST treat them as opaque.
 
-### 3.1 Must-ignore
+A client authenticates in either way:
 
-A receiver MUST ignore what it doesn't understand, and keep going:
+- **An access token**, from `POST /login` with `m.login.password` (a user
+  of the site and their password; their Matrix ID works as their user too),
+  sent as `Authorization: Bearer …`. Any Matrix client does this.
+- **The site's session**, for this package's components on the same site
+  (and the visitors of a "contact us" widget, who aren't logged in, when the
+  backend allows them). Unsafe methods then need the site's CSRF token
+  (`X-CSRFToken`). Cookies aren't sent cross-origin: the CORS headers are
+  `Access-Control-Allow-Origin: *`, for clients with a token.
 
-- an unknown **field** on any object;
-- an unknown **event** or **command** type (a server answers an unknown
-  command with an `error` of code `unknown_command`, see 7.4);
-- an unknown **capability**;
-- an unknown **part** type: the interface renders its `fallback` (5.1).
+## 3. The API served
 
-So new fields, events, parts and capabilities are never breaking changes.
+Under the base URL where the app's URLs are included (`/chat` in the
+examples: any Matrix client can use `https://<site>/chat` as its
+homeserver). `GET /_matrix/client/versions` lists `v1.1`–`v1.11`, and
+`io.github.rodolvbg.chat` in `unstable_features`.
 
-### 3.2 Namespaces
+| Endpoint | |
+|---|---|
+| `GET/POST /login`, `POST /logout`, `POST /logout/all`, `GET /account/whoami` | Sessions (section 2). |
+| `GET /sync` | `since`, `timeout` (long polling: up to `SYNC_TIMEOUT` seconds; under ASGI it holds no thread), `filter` (only `room.timeline.limit`, inline or uploaded), `full_state`. |
+| `POST /user/{userId}/filter`, `GET …/filter/{filterId}` | |
+| `GET/PUT /user/{userId}/account_data/{type}`, `…/rooms/{roomId}/account_data/{type}` | |
+| `GET /joined_rooms`, `POST /createRoom` | Section 8.4. |
+| `PUT /rooms/{roomId}/send/{eventType}/{txnId}` | Idempotent by `txnId`. Section 8. |
+| `PUT /rooms/{roomId}/redact/{eventId}/{txnId}` | Section 8.3. |
+| `GET /rooms/{roomId}/messages` | `from`, `dir` (`b`, `f`), `limit`. |
+| `GET /rooms/{roomId}/event/{eventId}`, `…/state`, `…/state/{type}/{key}`, `…/members`, `…/joined_members` | Changing the state is the server's (`M_FORBIDDEN`). |
+| `PUT /rooms/{roomId}/typing/{userId}` | Accepted and ignored where the conversation doesn't show it. |
+| `POST /rooms/{roomId}/receipt/{type}/{eventId}`, `…/read_markers` | `m.read`, `m.read.private`, `m.fully_read`. |
+| `POST /rooms/{roomId}/leave` | |
+| `GET /profile/{userId}[/{field}]` | Of whoever shares a room with the requester. |
+| `GET /capabilities`, `GET /pushrules/` | What clients ask for at start (no push). |
+| `POST /_matrix/media/v3/upload`, `GET /_matrix/client/v1/media/download/…` (and `/_matrix/media/v3/download/…`, thumbnails), `…/media/config` | A file is downloaded by its uploader, and by the participants of the conversation a message sent it to. What isn't an image, video or audio is served as a download. |
 
-Names defined by this protocol have **no prefix**: `text`, `image`,
-`message.created`, `receipts`. Everything else MUST be namespaced, so two
-extensions never collide and none collides with a future version of the
-protocol:
+Anything else under `/_matrix/` answers `404 M_UNRECOGNIZED`. Not
+implemented: federation, end-to-end encryption, registration, guests,
+presence, push, threads, spaces, VoIP, invites (participants join directly:
+the server decides who takes part).
 
-```
-<namespace>.<name>       e.g.  acme.order   shop.cart.updated   wa.template
-```
+`/sync` follows the specification. A client away for longer than the log is
+kept (`chat_ui_prune`) gets every room again, its timelines `limited`.
 
-The namespace is a short, lowercase name owned by whoever defines the
-extension (a company, a package: `acme`, `shop`, `wa`). Names of the
-protocol with a dot (`message.created`) are not namespaces: they're the
-protocol's own, listed in this document. A namespace MUST NOT be one of
-the protocol's reserved words: `message`, `conversation`, `participant`,
-`typing`, `read`, `presence`, `action`, `hello`, `ready`, `ack`, `error`,
-`history`, `chat`.
+## 4. Room state
 
-### 3.3 Extension data: `ext` and `meta`
+The standard events (`m.room.create`, `m.room.member`, `m.room.name`,
+`m.room.power_levels`, `m.room.join_rules`, `m.room.history_visibility`) and
+two of this package's, all with `state_key: ""` unless said. Only the server
+changes the state (`state_default: 100`).
 
-Every object of the protocol (conversation, participant, message, part,
-frame) MAY have two open objects:
-
-- **`ext`** — data defined by an extension, keyed by its namespace. Other
-  clients ignore it; clients that know the extension read their key:
-
-  ```json
-  "ext": { "acme": { "orderId": "A-1029", "priority": "high" } }
-  ```
-
-- **`meta`** — the application's own data, with no meaning in the
-  protocol, round-tripped unchanged (an internal id, a CRM reference…).
-
-Neither is ever interpreted by a client that doesn't know it.
-
-### 3.4 Fallbacks
-
-Anything that adds **content** carries a way to show it without knowing
-it: every part MAY have a `fallback` text, and an extension part MUST have
-one (5.1). An extension that adds **behaviour** (an event, a command, a
-capability) MUST be optional: a peer that ignores it still works.
-
-### 3.5 Versions
-
-The protocol has a version `MAJOR.MINOR` (this document: `1.0`).
-
-- **Minor** versions only add optional things (fields, parts, events,
-  capabilities): every `1.x` client works with every `1.x` server.
-- **Major** versions MAY change or remove things.
-- Client and server exchange their versions in the session (section 8);
-  each side uses only what both support.
-
-Extensions MAY version themselves too, in their capability (6.3):
-`"acme.order": { "version": "2" }`.
-
-## 4. Data types
-
-### 4.1 Participant
+### 4.1 `io.github.rodolvbg.chat.conversation`
 
 ```json
-{
-  "id": "p_7",
-  "kind": "contact",
-  "name": "Anna Smith",
-  "avatar": "https://example.com/a/7.png",
-  "handle": "+1 555 0100",
-  "ext": {},
-  "meta": {}
+{ "channel": "whatsapp", "state": "pending", "ext": { "com.acme": { "priority": "high" } } }
+```
+
+| Field | |
+|---|---|
+| `channel` | Informative: `web`, `whatsapp`, `bot`, `internal`, `email`, `sms`, `telegram`, or a namespaced one. A client MUST NOT change behaviour by channel, only by capabilities. |
+| `state` | `open`, `pending` (waiting for someone), `closed`, or a namespaced one. Nothing can be sent to a closed conversation. |
+| `ext` | A site's data, keyed by its namespace (section 9). |
+
+### 4.2 Participants: `m.room.member`
+
+Its content has, besides `membership` and `displayname`:
+
+```json
+"io.github.rodolvbg.chat.participant": {
+  "kind": "contact", "handle": "+1 555 0100", "avatar": "https://…", "ext": {}
 }
 ```
 
-| Field | Type | |
-|---|---|---|
-| `id` | string | Required. |
-| `kind` | string | Required. `user` (the person using this client), `agent` (staff answering), `bot`, `contact` (someone outside: a WhatsApp number, a visitor), `system`. Extension kinds are namespaced (`acme.supervisor`); unknown kinds render as `contact`. |
-| `name` | string | Display name. |
-| `avatar` | string (URL) | |
-| `handle` | string | How the channel knows them: a phone number, an email, a username. |
-| `ext`, `meta` | object | 3.3. |
+`kind`: `user` (the person using the client), `agent` (staff answering),
+`bot`, `contact` (someone outside: a WhatsApp number, a visitor), `system`,
+or a namespaced one (shown as `contact`). `handle`: how the channel knows
+them. `avatar`: an `https:` URL (`avatar_url` is for `mxc://` ones).
 
-The client learns which participant it is from `ready.me` (8.2).
+### 4.3 `io.github.rodolvbg.chat.capabilities`
 
-### 4.2 Conversation
-
-```json
-{
-  "id": "conv_1",
-  "channel": "whatsapp",
-  "title": "Anna Smith",
-  "participants": [ { "id": "p_7", "kind": "contact", "name": "Anna Smith" } ],
-  "capabilities": { "receipts": true, "composer": { "mode": "free" } },
-  "unread": 2,
-  "lastMessage": { "...": "a Message (4.3), maybe without its parts" },
-  "state": "open",
-  "updatedAt": "2026-10-20T10:00:00Z",
-  "ext": {},
-  "meta": {}
-}
-```
-
-| Field | Type | |
-|---|---|---|
-| `id` | string | Required. |
-| `channel` | string | Informative: the interface MUST NOT change behaviour by channel, only by `capabilities`. Protocol values: `web`, `whatsapp`, `bot`, `internal`, `email`, `sms`, `telegram`; others are namespaced. |
-| `title` | string | |
-| `participants` | Participant[] | |
-| `capabilities` | object | Section 6. |
-| `unread` | integer | Messages this client hasn't read. |
-| `lastMessage` | Message | For lists. |
-| `state` | string | `open`, `pending` (waiting for someone), `closed`. Extension states are namespaced. |
-| `updatedAt` | timestamp | |
-| `ext`, `meta` | object | 3.3. |
-
-### 4.3 Message
-
-```json
-{
-  "id": "m_123",
-  "clientId": "c_9f2",
-  "conversation": "conv_1",
-  "author": "p_7",
-  "parts": [ { "type": "text", "text": "Hi" } ],
-  "status": "delivered",
-  "replyTo": "m_100",
-  "createdAt": "2026-10-20T10:00:00Z",
-  "editedAt": null,
-  "deleted": false,
-  "streaming": false,
-  "reactions": [ { "emoji": "👍", "by": ["p_1"] } ],
-  "ext": {},
-  "meta": {}
-}
-```
-
-| Field | Type | |
-|---|---|---|
-| `id` | string | Required, given by the server. |
-| `clientId` | string | The id the client gave it when sending (7.3): how a client matches its optimistic message with the server's. |
-| `conversation` | string | Required. |
-| `author` | string | Participant id. Required, except for `system` messages, which MAY omit it. |
-| `parts` | Part[] | Required, at least one (an empty `text` for a deleted message is fine). |
-| `status` | string | Only meaningful for the client's own messages: `sending` (client-side only), `sent`, `delivered`, `read`, `failed`. |
-| `error` | Error | When `status` is `failed` (7.4). |
-| `replyTo` | string | Id of the message it answers. |
-| `createdAt` | timestamp | Required. |
-| `editedAt` | timestamp | |
-| `deleted` | boolean | Deleted messages keep their place; their parts MAY be emptied. |
-| `streaming` | boolean | `true` while a bot is still writing it (7.2, `message.delta`). |
-| `reactions` | array | With the `reactions` capability. |
-| `ext`, `meta` | object | 3.3. |
-
-### 4.4 Error
-
-```json
-{ "code": "window_closed", "message": "Only templates can be sent now.", "retry": false }
-```
-
-`code` is machine-readable (protocol codes below; extension codes
-namespaced), `message` is for people, `retry` says whether retrying the
-same command can work.
-
-Protocol codes: `bad_request`, `unauthorized`, `forbidden`, `not_found`,
-`unknown_command`, `unsupported` (a capability the conversation lacks),
-`window_closed`, `too_large`, `rate_limited`, `channel_error`, `internal`.
-
-## 5. Parts
-
-### 5.1 Common fields
-
-Every part has:
-
-| Field | Type | |
-|---|---|---|
-| `type` | string | Required. A protocol type (5.2) or a namespaced one. |
-| `fallback` | string | Plain text shown by a client that can't render the part. **Required for extension types**; optional, but recommended, for protocol types other than `text`. |
-| `ext`, `meta` | object | 3.3. |
-
-Rendering rule: a client renders a part of a type it knows; otherwise its
-`fallback`; otherwise a generic "unsupported content" line. A part is never
-silently dropped.
-
-### 5.2 Protocol parts
-
-| `type` | Fields | |
-|---|---|---|
-| `text` | `text` (string, required), `format` (`plain` default, or `markdown`) | `markdown` is a safe subset: emphasis, links, lists, code; never raw HTML. |
-| `image` | `url` (required), `alt`, `width`, `height`, `thumbnail` | |
-| `video` | `url` (required), `poster`, `duration` (seconds), `mime` | |
-| `audio` | `url` (required), `duration`, `mime`, `voice` (boolean: a voice note) | |
-| `file` | `url` (required), `name`, `size` (bytes), `mime` | |
-| `location` | `lat`, `lng` (required), `name`, `address` | |
-| `contact` | `name` (required), `phones` (string[]), `emails` (string[]) | A shared contact card. |
-| `buttons` | `buttons`: `{ id, label, style? }[]` (required), `persist` (boolean) | Quick replies: clicking sends an `action` command (7.3). Without `persist`, they hide once one is used or another message comes. `style`: `primary`, `secondary`, `danger`. |
-| `link` | `url` (required), `title`, `description`, `image` | A link preview. |
-| `card` | `title`, `text`, `image`, `buttons` (as above), `url` | Rich card, as bots send. |
-| `system` | `text` (required), `code` | An event in the thread ("Anna joined", "Assigned to support"). `code` is machine-readable. |
-| `template` | `template` (id, required), `params` (object) | A pre-approved message, for `composer.mode: "templates"` (6.1, 13.2). Its `fallback` is the rendered text. |
-
-Attachments that are being uploaded MAY carry `progress` (0–1) client-side.
-
-### 5.3 Extension parts
-
-```json
-{
-  "type": "acme.order",
-  "fallback": "Order A-1029: 2 items, 59.90 €",
-  "ext": { "acme": { "orderId": "A-1029", "total": "59.90", "currency": "EUR" } }
-}
-```
-
-The fields of an extension part SHOULD go under `ext.<namespace>`: so a
-future protocol field never clashes with them. See section 12.
-
-## 6. Capabilities
-
-Two sets, both open to extension.
-
-### 6.1 Conversation capabilities
-
-Sent by the server with each conversation (`conversation.capabilities`),
-and updated with `conversation.updated` (a WhatsApp window closing changes
-them). The interface adapts to them; it never checks `channel`.
+What a conversation allows. Missing ones are **off**, except
+`composer.mode`, which defaults to `free`. The server enforces them
+(section 8); clients offer only what they allow.
 
 ```json
 {
   "attachments": { "types": ["image", "video", "audio", "file"], "maxSize": 16777216 },
   "receipts": true,
   "typing": true,
-  "presence": false,
-  "streaming": false,
   "buttons": true,
   "replies": true,
-  "reactions": true,
+  "reactions": { "emojis": ["👍", "✅"] },
   "edit": false,
   "delete": false,
   "history": true,
-  "composer": {
-    "mode": "free",
-    "maxLength": 4096,
-    "placeholder": "Write a message…"
+  "composer": { "mode": "free", "maxLength": 4096, "placeholder": "Write a message…" }
+}
+```
+
+| Capability | Type | When on |
+|---|---|---|
+| `attachments` | `false` or `{ types, maxSize }` | Files of those kinds can be sent. |
+| `receipts` | boolean | Statuses (sent, delivered, read) are shown. |
+| `typing` | boolean | `m.typing` is sent and shown. |
+| `buttons` | boolean | Quick replies and cards' buttons can be used (section 5.3). |
+| `replies` | boolean | `m.in_reply_to`. |
+| `reactions` | `false`, `true` or `{ emojis }` | `m.reaction`: any emoji, or only those. |
+| `edit` / `delete` | boolean | `m.replace` / redactions of one's own messages. |
+| `history` | boolean | Older messages are offered (`/messages`). |
+| `composer.mode` | string | `free` (anything), `templates` (only templates: WhatsApp outside its 24-hour window), `actions` (only buttons: a bot's menu), `closed` (nothing; `composer.reason` says why), or a namespaced one (treated as `closed`). |
+| `composer.templates` | `{ id, name, preview, params }[]` | With `templates`: what can be sent (section 5.4). `preview` has `{{1}}`, `{{2}}`… (or `{{name}}`) for `params`. |
+| `composer.maxLength`, `placeholder`, `reason` | | For the composer. |
+
+Extensions add namespaced capabilities, with an object value (so they can
+grow): `"com.acme.orders": { "version": "2" }`.
+
+## 5. Messages
+
+### 5.1 Matrix's message types
+
+`m.text`, `m.notice` (a bot's), `m.emote`, `m.image`, `m.video`, `m.audio`
+(with `org.matrix.msc3245.voice` for a voice note), `m.file` and
+`m.location`, as the specification has them. HTML (`format:
+"org.matrix.custom.html"`, `formatted_body`) is rendered from the
+specification's safe subset, rebuilt node by node: never inserted as it
+comes. The server writes it for markdown (`content.text(…, markdown=True)`),
+with its plain text as `body`.
+
+### 5.2 Fallbacks
+
+Everything this package (or a site) adds is shown by any other client
+through what Matrix already has: a block's message keeps a `body` (and
+`formatted_body`) that says it in words, and a message type of its own
+always has a `body`. A client that doesn't know a block ignores it; one
+that doesn't know a message type shows its `body`, as the specification
+asks. Nothing is silently dropped.
+
+### 5.3 Quick replies: the `buttons` block, and answers
+
+Under a message (an `m.text`, `m.notice` or a card):
+
+```json
+{
+  "msgtype": "m.text",
+  "body": "How can I help?\n\n• My order\n• Talk to someone",
+  "io.github.rodolvbg.chat.buttons": {
+    "body": "How can I help?",
+    "buttons": [ { "id": "order", "label": "My order" }, { "id": "human", "label": "Talk to someone", "style": "primary" } ],
+    "persist": false
   }
 }
 ```
 
-| Capability | Type | Meaning when on |
-|---|---|---|
-| `attachments` | `false` or `{ types, maxSize }` | The client may send those part types. |
-| `receipts` | boolean | Messages report `delivered` / `read`. |
-| `typing` | boolean | `typing` events are sent and accepted. |
-| `presence` | boolean | `presence` events about participants. |
-| `streaming` | boolean | Messages may arrive with `streaming` and `message.delta`. |
-| `buttons` | boolean | `buttons` and `card` parts, and the `action` command. |
-| `replies` | boolean | `replyTo` on sent messages. |
-| `reactions` | `false`, `true` or `{ emojis }` | `message.react`. With `emojis`, only those (the interface offers them); otherwise any emoji. |
-| `edit` / `delete` | boolean | `message.edit` / `message.delete` on own messages. |
-| `history` | boolean | Older messages can be fetched (section 9). |
-| `composer` | object | What the user may write: |
-| `composer.mode` | string | `free` (anything), `templates` (only templates: WhatsApp outside its 24-hour window), `actions` (only buttons: a bot's menu), `closed` (nothing; `composer.reason` says why). Extension modes are namespaced; unknown modes behave as `closed`. |
-| `composer.templates` | `{ id, name, preview, params? }[]` | With `templates`: what can be sent (`message.send` with a `template` part, 13.2). |
-| `composer.maxLength` | integer | |
-| `composer.placeholder`, `composer.reason` | string | Texts for the interface. |
+The block repeats the text before the buttons (`body`, `formatted_body`):
+the message's own have the labels too, for other clients. `style`:
+`primary`, `secondary` (default), `danger`. Without `persist`, they're done
+once one is used or another message comes.
 
-Missing capabilities are **off**, except `composer.mode`, which defaults to
-`free`.
-
-### 6.2 Client capabilities
-
-Sent by the client in `hello` (8.1): what it can render and handle.
+Using one is sending its answer — its label, as WhatsApp writes it — with
+the `action` block, as a reply to the message:
 
 ```json
 {
-  "parts": ["text", "image", "video", "audio", "file", "buttons", "card", "acme.order"],
-  "streaming": true,
-  "formats": ["plain", "markdown"]
+  "msgtype": "m.text",
+  "body": "My order",
+  "io.github.rodolvbg.chat.action": { "event_id": "$41", "button": "order" },
+  "m.relates_to": { "m.in_reply_to": { "event_id": "$41" } }
 }
 ```
 
-A server SHOULD use them to degrade what it sends: a `card` as text and
-links for a client without it, a `markdown` text as `plain`, any other
-part as its `fallback`. It MUST NOT assume a client renders a part type it
-didn't list. A client without `streaming` gets no `message.delta`: it
-shows a streamed message when its final `message.updated` comes.
+The server checks the button and writes the label itself. A client without
+buttons answers by writing (the backend may match the text).
 
-### 6.3 Extension capabilities
+### 5.4 This package's message types and blocks
 
-Namespaced keys, in either set, with an object value (so they can grow):
-
-```json
-"acme.order": { "version": "2", "editable": true }
-```
-
-## 7. Frames, events and commands
-
-### 7.1 Frame
-
-Everything that travels is a frame:
-
-```json
-{
-  "type": "message.updated",
-  "id": "f_881",
-  "seq": 1042,
-  "ref": "cmd_17",
-  "data": { "id": "m_123", "conversation": "conv_1", "status": "read" },
-  "ext": {}
-}
-```
-
-| Field | | |
+| | Content | Others see |
 |---|---|---|
-| `type` | Required. | The event or command. |
-| `id` | Commands: required. Events: optional. | Unique per sender; what `ref` and `ack` point to. |
-| `seq` | Events | Increasing number of the event in this client's stream, used to resume (8.3). |
-| `ref` | Events | The command this event answers, if any. |
-| `data` | Required (MAY be `{}`). | The payload, below. |
-| `ext` | | 3.3. |
+| `msgtype: io.github.rodolvbg.chat.card` | `"io.github.rodolvbg.chat.card": { title, text, image, url }`, and a `buttons` block | Its `body`: title, text, link, the buttons' labels. |
+| `msgtype: io.github.rodolvbg.chat.template` | `"io.github.rodolvbg.chat.template": { id, params }` | Its `body`: the template's text, filled in (by the server). |
+| `msgtype: io.github.rodolvbg.chat.contact` | `"io.github.rodolvbg.chat.contact": { name, phones, emails }` | Its `body`: name, phones, emails. |
+| The `link` block (on an `m.text`; on an `m.location`, its `title` and `description` name the place) | `{ url, title, description, image }` | The text: title and URL. |
+| The `system` block (on an `m.notice` from `@system:…`) | `{ code? }`: "Ana joined", "Assigned to support" | A notice. |
 
-### 7.2 Events (server → client)
+### 5.5 Relations
 
-| `type` | `data` | |
+Replies (`m.in_reply_to`), edits (`m.replace`, with `m.new_content`; only of
+one's own messages), reactions (`m.reaction`, `m.annotation`; one per emoji
+and person, else `M_DUPLICATE_ANNOTATION`; taken back by redacting it) and
+deletions (`m.room.redaction`) are Matrix's, gated by the capabilities.
+
+## 6. Ephemeral events
+
+In a room's `ephemeral` of `/sync`:
+
+| Type | Content | |
 |---|---|---|
-| `ready` | `{ protocol, me, capabilities, conversations? }` | Answer to `hello` (8.2). |
-| `ack` | `{ }` | A command was accepted (`ref` is its id). |
-| `error` | Error, plus `{ fatal? }` | A command failed (`ref`), or the session did (`fatal: true`). |
-| `conversation.created` | Conversation | |
-| `conversation.updated` | Partial conversation: `id` and the fields that changed | E.g. new capabilities, a new title, `state: "closed"`. |
-| `conversation.removed` | `{ id }` | The client no longer has access to it. |
-| `message.created` | Message | A new message, the client's own included (matched by `clientId`). |
-| `message.updated` | Partial message: `id`, `conversation` and what changed | Status, edit, deletion, reactions, end of streaming. |
-| `message.delta` | `{ id, conversation, part, text }` | Streaming: append `text` to part number `part` (0-based) of message `id`. A delta for a part that doesn't exist yet creates it as `text`. |
-| `typing` | `{ conversation, participant, active }` | |
-| `read` | `{ conversation, participant, until }` | `participant` has read everything up to message `until`. |
-| `presence` | `{ participant, status, lastSeen? }` | `status`: `online`, `away`, `offline`. |
-| `history` | `{ conversation, messages, before?, more }` | Answer to `history.fetch` (section 9). |
+| `m.typing` | `{ user_ids }` | |
+| `m.receipt` | `{ <event id>: { <type>: { <user id>: { ts } } } }` | `m.read`, and `io.github.rodolvbg.chat.delivered`: the channel delivered it (the server's, from an integration). A message is *read* when anyone else's `m.read` is at or after it, *delivered* when their `delivered` is. |
+| `io.github.rodolvbg.chat.stream` | `{ id, sender, body, markdown? }` or `{ id, sender, done: true }` | A message being written: section 7. |
+| `io.github.rodolvbg.chat.status` | `{ event_id, status, error? }` | What receipts don't say: `failed` (the channel rejected it), with an `error` (`{ errcode, error }`). Also in the message's `unsigned`, under the same key. |
 
-A streamed message: `message.created` with `streaming: true` (its parts
-MAY be empty or partial), then any number of `message.delta`, then
-`message.updated` with `streaming: false` and the final `parts` (which
-replace the accumulated ones; a server SHOULD always send them, for the
-clients that got no deltas).
+Extensions send their own (`services.ephemeral()`); clients ignore what they
+don't know.
 
-### 7.3 Commands (client → server)
+## 7. AI answers, as they're written
 
-Every command has an `id`; the server answers with `ack` or `error`
-referring to it, besides any events it causes.
-
-| `type` | `data` | Needs |
-|---|---|---|
-| `hello` | `{ protocol, client, capabilities, resume? }` | Section 8. |
-| `conversation.open` | `{ conversation, limit? }` or `{ with, channel? }` | Subscribe to one, or start one with participants `with`. The server sends its `conversation.created` and a `history` event with its latest messages (section 9), whether or not the conversation has the `history` capability. Its `ack` has `{ conversation }`: the id, which a client starting one doesn't know yet. |
-| `conversation.close` | `{ conversation }` | Unsubscribe. |
-| `message.send` | `{ conversation, clientId, parts, replyTo? }` | `composer.mode` allows it. **Idempotent by `clientId`**: resending the same `clientId` MUST NOT create a second message. |
-| `message.edit` | `{ id, parts }` | `edit` |
-| `message.delete` | `{ id }` | `delete` |
-| `message.react` | `{ id, emoji, active }` | `reactions` |
-| `message.read` | `{ conversation, until }` | The server SHOULD answer with `conversation.updated` (`unread`). |
-| `typing` | `{ conversation, active }` | `typing` |
-| `action` | `{ conversation, message, button }` | `buttons`: a button or quick reply was used. The server answers with whatever it does (a bot's reply, for instance). |
-| `history.fetch` | `{ conversation, before?, limit? }` | `history` (to fetch older messages) |
-
-A client MUST NOT send a command that the conversation's capabilities don't
-allow; a server MUST reject it (`unsupported`).
-
-### 7.4 Acknowledgements and errors
-
-- A server MUST answer every command with exactly one `ack` or `error`
-  whose `ref` is the command's `id`.
-- `message.send` fails as `error` (`ref`), and later failures of a sent
-  message (the channel rejected it) come as `message.updated` with
-  `status: "failed"` and `error`.
-- A client SHOULD retry a command after a transport failure, with the same
-  `id` (and, for `message.send`, the same `clientId`): commands are safe to
-  repeat.
-
-## 8. Session: hello and resume
-
-### 8.1 hello
-
-The first thing a client sends:
+While an AI model writes, the server sends the text so far as `stream`
+ephemeral events (every 0.1 s or 200 characters), and its author as
+`m.typing`. When it ends, it sends the message, with the stream's `id`:
 
 ```json
-{
-  "type": "hello",
-  "id": "cmd_1",
-  "data": {
-    "protocol": ["1.0"],
-    "client": { "name": "django-chat-ui", "version": "0.1.0" },
-    "capabilities": { "parts": ["text", "image", "buttons"], "streaming": true },
-    "resume": { "seq": 1041 }
-  }
-}
+{ "type": "io.github.rodolvbg.chat.stream", "content": { "id": "9f2c", "sender": "@p5:shop.example", "body": "Your order **A-1029** ships", "markdown": true } }
+{ "type": "m.room.message", "content": { "msgtype": "m.text", "body": "Your order A-1029 ships today.", "format": "org.matrix.custom.html", "formatted_body": "<p>Your order <strong>A-1029</strong> ships today.</p>", "io.github.rodolvbg.chat.stream": { "id": "9f2c" } } }
 ```
 
-`protocol` lists the versions the client speaks.
+This package's clients show the message growing, and replace it with the
+real one. Any other sees the bot typing, then its message: one event, not
+an edit per word (unlike [MSC4357](https://github.com/matrix-org/matrix-spec-proposals/pull/4357)'s
+live messages). If the model fails, what came is sent; if nothing came,
+`{ id, done: true }` ends it.
 
-### 8.2 ready
+An agent of any framework that speaks [AG-UI](https://docs.ag-ui.com)
+(LangGraph, CrewAI, Mastra, Pydantic AI…) answers this way through
+`django_chat_ui.agui.AgUiAgent`: its `TEXT_MESSAGE_*` events become the
+stream, and the conversation its `RunAgentInput`.
+
+## 8. What clients may send
+
+### 8.1 Messages
+
+- Nothing to a `closed` conversation (`M_FORBIDDEN`).
+- `composer.mode`: `free` takes texts (`m.text`, `m.emote`, with HTML),
+  files and templates; `templates`, only templates
+  (`IO.GITHUB.RODOLVBG.CHAT.WINDOW_CLOSED`); `actions`, only buttons' answers;
+  anything else, nothing (`IO.GITHUB.RODOLVBG.CHAT.UNSUPPORTED`, with
+  `composer.reason`).
+- Texts: not empty, at most `composer.maxLength` (`M_TOO_LARGE`).
+- Files: uploaded by the sender, of a kind in `attachments.types` and at
+  most `maxSize`. Their `info` is rebuilt by the server.
+- Templates: one of `composer.templates`; the server writes their text.
+- A site's message types (a namespaced `msgtype` with a `body`), when its
+  backend allows them (`validate_content`). This package's blocks are the
+  server's to send: a client's are left out (so nobody fakes a system
+  notice or a button).
+- `m.notice` is a bot's: not for clients.
+
+### 8.2 Reactions, edits, replies
+
+As section 5.5, where the capabilities allow them.
+
+### 8.3 Redactions
+
+One's own messages (with `delete`), reactions and events of a site's types.
+Never state events.
+
+### 8.4 Starting a conversation
+
+`POST /createRoom` with `invite` (user IDs): the backend decides who may
+start one with whom (`can_start`). Without `invite` — the "contact us"
+widget — it goes to the support team, `pending`. Its channel, in
+`initial_state`:
 
 ```json
-{
-  "type": "ready",
-  "ref": "cmd_1",
-  "data": {
-    "protocol": "1.0",
-    "me": { "id": "p_1", "kind": "agent", "name": "Rodolfo" },
-    "capabilities": { "acme.order": { "version": "2" } },
-    "conversations": [ ],
-    "resumed": true
-  }
-}
+{ "invite": [], "initial_state": [ { "type": "io.github.rodolvbg.chat.conversation", "state_key": "", "content": { "channel": "web" } } ] }
 ```
 
-`protocol` is the version chosen (the highest both speak). Session-level
-`capabilities` are those that apply to every conversation (extensions,
-mostly). `conversations` MAY list the client's conversations, for an inbox.
+### 8.5 Errors
 
-### 8.3 Resume
+Matrix's (`{ "errcode", "error" }`, its HTTP statuses), and this package's:
+`IO.GITHUB.RODOLVBG.CHAT.UNSUPPORTED` (403: the conversation doesn't allow
+it) and `IO.GITHUB.RODOLVBG.CHAT.WINDOW_CLOSED` (403: only templates now).
 
-Events carry `seq`. A client that reconnects sends the last `seq` it
-handled in `hello.resume`; the server replays what came after, and answers
-`resumed: true`. If it can't (too old), it answers `resumed: false`, and
-the client reloads what it shows (conversations, then their latest
-history).
+## 9. Extending it
 
-## 9. History
-
-Opening a conversation (`conversation.open`) brings its latest messages.
-With the `history` capability, a client can then fetch older ones, page
-by page:
-
-```json
-{ "type": "history.fetch", "id": "cmd_8",
-  "data": { "conversation": "conv_1", "before": "m_100", "limit": 30 } }
-```
-
-```json
-{ "type": "history", "ref": "cmd_8",
-  "data": { "conversation": "conv_1", "messages": [ ], "before": "m_70", "more": true } }
-```
-
-`messages` come oldest first. `before` in the answer is the cursor for the
-next page; `more: false` means there's nothing older. Cursors are opaque.
-
-## 10. Transports
-
-The protocol is the same over any transport. Three are defined:
-
-### 10.1 SSE + HTTP (default)
-
-- **Events:** `GET <base>/events` — a
-  [Server-Sent Events](https://html.spec.whatwg.org/multipage/server-sent-events.html)
-  stream: each frame is one SSE message, `id: <seq>`, `data: <frame JSON>`,
-  **without an event name**, so a client gets every type, its own and
-  extensions', in `onmessage`. The stream starts after `?after=<seq>`
-  (what `hello.resume` has), or after the browser's `Last-Event-ID` when it
-  reconnects by itself, or else from now on.
-- A server MAY send an `id:` alone, past events that weren't for this
-  client, so a reconnection doesn't read them again; and comments (`:`) to
-  keep the connection alive. It MAY end the stream at any time: the client
-  reconnects, losing nothing.
-- **Commands:** `POST <base>/commands` with one frame, or an array of
-  frames, as JSON. The response is the array of the frames that answer
-  them, for this client only: each one's `ack` or `error` (`ready` for
-  `hello`), after what it asked for (the `conversation.created` and
-  `history` of `conversation.open`, the `history` of `history.fetch`).
-  They carry `ref`, not `seq`, and aren't repeated on the stream; the
-  events a command causes for everyone (`message.created`…) come on the
-  stream.
-- A client opens the stream first and then sends `hello`, so it misses
-  nothing in between.
-
-It needs no WebSocket server, and works under a strict Content Security
-Policy (`connect-src 'self'`).
-
-### 10.2 WebSocket
-
-One frame per WebSocket text message, both directions, on `<base>/ws`.
-
-- The first client frame is `hello`. The server answers with `ready`, and
-  then starts the stream of events: after `hello.resume.seq` if it could
-  resume (`resumed: true`), or from now on.
-- The answers to commands (`ack`, `error`, and what they asked for) and
-  the events travel on the same socket; answers carry `ref`, events `seq`.
-- A client that reconnects says `hello` again, with the last `seq` it got.
-- A server closes a connection it can't authenticate with code `4401`.
-
-### 10.3 Polling
-
-`POST <base>/commands` as above, and `GET <base>/events?after=<seq>` (with
-`Accept: application/json`) answering at once with what came after:
-
-```json
-{ "frames": [ { "type": "typing", "seq": 1043, "data": { } } ], "seq": 1050 }
-```
-
-`seq` is where the next poll starts: past the client's events and the
-others'. Without `after`, `frames` is empty and `seq` is now. For
-environments without long-lived connections.
-
-## 11. Security
-
-- **Authentication** belongs to the transport (the site's session and its
-  CSRF token on `POST`, a bearer token…), never to frames.
-- **The server decides the author.** It MUST ignore any author a client
-  claims, and use the authenticated participant.
-- **No HTML.** Clients MUST render text as text, and `markdown` through a
-  renderer that drops raw HTML. Extension parts too: a client renders
-  their fields as text or through its own templates, never as HTML from
-  the payload.
-- **URLs:** clients SHOULD only follow `https:` (and same-origin) URLs from
-  parts, and open links with `rel="noopener noreferrer"`.
-- **Authorization** per conversation: a server MUST only send events of
-  conversations the participant may see, and check every command.
-- Attachments SHOULD be served from URLs that check access, or expire.
-
-## 12. Extending the protocol
-
-What an adopter can add, and how, without touching this document:
+A site, or a package on top of this one, adds what it needs the way this
+package does: under **its own namespace** (reverse DNS of a domain it
+controls: `com.acme`), never `m.` nor `io.github.rodolvbg.chat`.
 
 | To add | Do | Others see |
 |---|---|---|
-| Data on existing objects | `ext.<ns>` (3.3), or `meta` for app-only data | Nothing changes. |
-| A kind of content | A part `<ns>.<name>` with a `fallback` (5.3) | Its fallback text. |
-| Something that happens | An event `<ns>.<name>` | Nothing (ignored). |
-| Something a user does | A command `<ns>.<name>`, gated by a capability | It's never offered to them. |
-| A feature of some conversations | A capability `<ns>.<name>: { … }` (6.3) | Off. |
-| A kind of participant / state / composer mode | A namespaced value | `contact` / as unknown / `closed`. |
-| A transport | Any binding that carries the same frames | Unchanged protocol. |
+| Data on a conversation or a participant | `ext` (`serialize_conversation`, `serialize_participant`), keyed by your namespace | Nothing changes. |
+| A kind of message | A `msgtype` `com.acme.order`, with a `body`; render it with `registerMsgtype()` | Its `body`. |
+| A block on messages | A key `com.acme.tracking` in the content of your server's messages | The message as it is. |
+| Something a user does | An event type `com.acme.order.cancel`: `ChatBackend.event_types`, `validate_content`, `on_event` | Nothing (ignored). |
+| Something that happens | `services.ephemeral(conversation, "com.acme.progress", {…})`, or a timeline event (`services.send(…, type=…)`) | Nothing. |
+| A feature of some conversations | A capability `com.acme.orders: {…}` | Off. |
+| A kind of participant, a state, a composer mode | A namespaced value | `contact` / as unknown / `closed`. |
 
-Guidelines:
+Guidelines: gate behaviour behind a capability; give content a `body`;
+version what you add in its capability; and when it's useful beyond you,
+propose it to Matrix as an [MSC](https://spec.matrix.org/proposals/).
 
-1. **Choose one namespace** and use it for everything you add.
-2. **Gate behaviour behind a capability**, so a client only offers it
-   where the server supports it, and a server knows which clients can take
-   it (client capabilities, 6.2).
-3. **Always give a fallback** to content.
-4. **Version your extension** in its capability, and follow the same
-   rules: add optional things, never change their meaning.
-5. **Promote** an extension that many adopt: a later minor version of the
-   protocol MAY adopt it without the prefix, and servers can send both
-   during the transition.
+## 10. WhatsApp, and other channels
 
-## 13. Examples
+An integration (a webhook, a bridge) turns a channel's messages into these
+events, through `django_chat_ui.services`. For WhatsApp's Cloud API:
 
-### 13.1 A chatbot answering in streaming, with quick replies
+| WhatsApp | Here |
+|---|---|
+| `text` | `m.text` (`content.text`) |
+| `image`, `video`, `audio` (voice), `document`, `sticker` | `m.image`, `m.video`, `m.audio` (+ voice), `m.file`, `m.image` — the file uploaded as media |
+| `location` | `m.location` (`content.location`) |
+| `contacts` | `…chat.contact` (`content.contact`) |
+| `interactive` (reply buttons, lists) | The `buttons` block (`content.text(…, buttons=…)`); the customer's choice, an answer with `action` |
+| `template` | `…chat.template` (`content.template`); outside the 24-hour window, `composer.mode: "templates"` |
+| `reaction` | `m.reaction` (`services.react`) |
+| Statuses `sent`, `delivered`, `read`, `failed` | Sent; `services.delivered()`; `services.read()`; `services.status(message, "failed", error)` |
+| `context` (a reply) | `m.in_reply_to` |
+
+## 11. Examples
+
+### 11.1 A chatbot with quick replies, answering as it writes
 
 ```json
-{"type": "message.send", "id": "cmd_4", "data": {"conversation": "conv_bot", "clientId": "c_1", "parts": [{"type": "text", "text": "Where is my order?"}]}}
-{"type": "ack", "ref": "cmd_4", "seq": 10, "data": {}}
-{"type": "message.created", "seq": 11, "data": {"id": "m_1", "clientId": "c_1", "conversation": "conv_bot", "author": "p_me", "parts": [{"type": "text", "text": "Where is my order?"}], "status": "sent", "createdAt": "2026-10-20T10:00:00Z"}}
-{"type": "message.created", "seq": 12, "data": {"id": "m_2", "conversation": "conv_bot", "author": "p_bot", "parts": [], "streaming": true, "createdAt": "2026-10-20T10:00:01Z"}}
-{"type": "message.delta", "seq": 13, "data": {"id": "m_2", "conversation": "conv_bot", "part": 0, "text": "Your order A-1029 "}}
-{"type": "message.delta", "seq": 14, "data": {"id": "m_2", "conversation": "conv_bot", "part": 0, "text": "ships today."}}
-{"type": "message.updated", "seq": 15, "data": {"id": "m_2", "conversation": "conv_bot", "streaming": false, "parts": [
-  {"type": "text", "text": "Your order A-1029 ships today."},
-  {"type": "buttons", "buttons": [{"id": "track", "label": "Track it"}, {"id": "human", "label": "Talk to someone"}], "fallback": "Reply: Track it / Talk to someone"}
-]}}
-{"type": "action", "id": "cmd_5", "data": {"conversation": "conv_bot", "message": "m_2", "button": "human"}}
+{"type": "m.room.message", "sender": "@p9:shop.example", "content": {"msgtype": "m.text", "body": "Hi! How can I help?\n\n• My order", "io.github.rodolvbg.chat.buttons": {"body": "Hi! How can I help?", "buttons": [{"id": "order", "label": "My order"}]}}}
+{"type": "m.room.message", "sender": "@p4:shop.example", "content": {"msgtype": "m.text", "body": "My order", "io.github.rodolvbg.chat.action": {"event_id": "$41", "button": "order"}, "m.relates_to": {"m.in_reply_to": {"event_id": "$41"}}}}
+{"type": "m.typing", "content": {"user_ids": ["@p9:shop.example"]}}
+{"type": "io.github.rodolvbg.chat.stream", "content": {"id": "s1", "sender": "@p9:shop.example", "body": "Your order ships", "markdown": true}}
+{"type": "m.room.message", "sender": "@p9:shop.example", "content": {"msgtype": "m.text", "body": "Your order ships today.", "io.github.rodolvbg.chat.stream": {"id": "s1"}}}
 ```
 
-### 13.2 WhatsApp: the 24-hour window closes
+### 11.2 WhatsApp: the 24-hour window closes
 
 ```json
-{"type": "conversation.updated", "seq": 90, "data": {"id": "conv_wa", "capabilities": {"receipts": true, "composer": {
+{"type": "io.github.rodolvbg.chat.capabilities", "state_key": "", "content": {"receipts": true, "composer": {
   "mode": "templates",
   "reason": "More than 24 hours since the customer's last message.",
-  "templates": [{"id": "followup_en", "name": "Follow-up", "preview": "Hi {{1}}, can we help with anything else?", "params": ["name"]}]
-}}}}
-{"type": "message.send", "id": "cmd_9", "data": {"conversation": "conv_wa", "clientId": "c_7", "parts": [
-  {"type": "template", "template": "followup_en", "params": {"name": "Anna"}, "fallback": "Hi Anna, can we help with anything else?"}
-]}}
+  "templates": [{"id": "followup", "name": "Follow-up", "preview": "Hi {{1}}, can we help with anything else?", "params": ["name"]}]
+}}}
 ```
-
-Its message uses the `template` part (5.2) with one of the
-conversation's `composer.templates`.
-
-### 13.3 Internal chat with an extension part
 
 ```json
-{"type": "message.created", "seq": 300, "data": {"id": "m_9", "conversation": "conv_team", "author": "p_5", "createdAt": "2026-10-20T12:00:00Z", "parts": [
-  {"type": "text", "text": "This order is late:"},
-  {"type": "acme.order", "fallback": "Order A-1029 · 2 items · €59.90", "ext": {"acme": {"orderId": "A-1029", "total": "59.90", "currency": "EUR"}}}
-]}}
+PUT /rooms/!7:shop.example/send/m.room.message/t12
+{"msgtype": "io.github.rodolvbg.chat.template", "body": "Hi Anna, can we help with anything else?", "io.github.rodolvbg.chat.template": {"id": "followup", "params": {"name": "Anna"}}}
 ```
 
-A client that registered `acme.order` renders the order card; any other
+### 11.3 A site's own kind of message
+
+```json
+{"msgtype": "com.acme.order", "body": "Order A-1029 · 2 items · €59.90", "com.acme.order": {"id": "A-1029", "total": "59.90", "currency": "EUR"}}
+```
+
+A client that registered `com.acme.order` renders the order; any other
 shows "Order A-1029 · 2 items · €59.90".
-
-### 13.4 A "contact us" widget, before anyone answers
-
-```json
-{"type": "conversation.created", "seq": 1, "data": {"id": "conv_v1", "channel": "web", "state": "pending",
-  "participants": [{"id": "p_v", "kind": "user", "name": "Visitor"}],
-  "capabilities": {"attachments": {"types": ["image", "file"], "maxSize": 5242880}, "typing": true, "composer": {"mode": "free"}}}}
-{"type": "message.created", "seq": 2, "data": {"id": "m_s1", "conversation": "conv_v1", "createdAt": "2026-10-20T09:00:00Z", "parts": [
-  {"type": "system", "code": "queued", "text": "We'll answer in a few minutes."}
-]}}
-```
