@@ -22,6 +22,7 @@
 
 import "./chat-thread.js";
 import { element, format } from "./dom.js";
+import { followPageTheme, unfollowPageTheme } from "./theme.js";
 
 export const WIDGET_TEXTS = {
     open: "Chat with us",
@@ -101,6 +102,7 @@ export class ChatWidget extends HTMLElement {
     }
 
     connectedCallback() {
+        followPageTheme(this);
         if (!this.launcher) this.build();
         document.addEventListener("keydown", this.onKey);
         this.renderTexts();
@@ -108,6 +110,7 @@ export class ChatWidget extends HTMLElement {
     }
 
     disconnectedCallback() {
+        unfollowPageTheme(this);
         document.removeEventListener("keydown", this.onKey);
         this._client?.removeEventListener("conversations", this.onChange);
     }

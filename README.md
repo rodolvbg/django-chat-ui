@@ -36,7 +36,7 @@ The same conversation, from the site's widget:
 
 WhatsApp's 24-hour window closed, the composer offers only templates; on a
 phone, the inbox shows the list or the conversation; and it follows the
-system's dark mode:
+page's dark theme (or the system's):
 
 ![Only templates can be sent to Anna](docs/screenshots/templates.png)
 
@@ -368,7 +368,11 @@ package's capabilities allow only plain texts.
 
 Each takes its texts, to translate them: `element.texts = { send: "Enviar" }`.
 Theme them with the `--chat-*` custom properties (on the inbox or the
-widget, they reach its thread), or `data-theme="light"`/`"dark"`.
+widget, they reach its thread). Light or dark, they follow the page around
+them: Django's admin's theme (`data-theme` on `<html>`), the `dark` class
+of Unfold and Tailwind, or else the page's background — and only when the
+page says nothing, the system's. A theme switch on the page switches them
+too. `data-theme="light"`/`"dark"` on a component fixes its own.
 
 Your own kinds of messages render with `registerMsgtype("com.acme.order",
 render)`; any other client shows their `body`.

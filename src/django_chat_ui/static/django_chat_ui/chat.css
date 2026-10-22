@@ -2,7 +2,12 @@
  * custom properties. */
 
 /* The theme: on each component, unless inside another one (then it
- * inherits that one's, so theming a <chat-inbox> themes its thread). */
+ * inherits that one's, so theming a <chat-inbox> themes its thread).
+ *
+ * Dark, the first that says it: its own data-theme="dark"/"light"; the
+ * page's theme around it, as theme.js reads it (data-page-theme: Django's
+ * admin's data-theme, Tailwind's and Unfold's "dark" class, the page's
+ * background); the system's. */
 :is(chat-thread, chat-inbox, chat-widget):not(:is(chat-inbox, chat-widget) *) {
     --chat-bg: #fff;
     --chat-fg: #1f2328;
@@ -27,7 +32,7 @@
 @media (prefers-color-scheme: dark) {
     :is(chat-thread, chat-inbox, chat-widget):not(
             :is(chat-inbox, chat-widget) *
-        ):not([data-theme="light"]) {
+        ):not([data-theme="light"], [data-page-theme="light"]) {
         --chat-bg: #0d1117;
         --chat-fg: #e6edf3;
         --chat-muted: #8b949e;
@@ -45,7 +50,10 @@
 
 :is(chat-thread, chat-inbox, chat-widget):not(
         :is(chat-inbox, chat-widget) *
-    )[data-theme="dark"] {
+    ):is(
+        [data-theme="dark"],
+        [data-page-theme="dark"]:not([data-theme="light"])
+    ) {
     --chat-bg: #0d1117;
     --chat-fg: #e6edf3;
     --chat-muted: #8b949e;

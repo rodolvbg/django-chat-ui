@@ -28,6 +28,7 @@ import {
     SYSTEM,
     TEMPLATE,
 } from "./matrix.js";
+import { followPageTheme, unfollowPageTheme } from "./theme.js";
 
 export const TEXTS = {
     placeholder: "Write a message…",
@@ -95,11 +96,13 @@ export class ChatThread extends HTMLElement {
     }
 
     connectedCallback() {
+        followPageTheme(this);
         if (!this.shell) this.build();
         this.bind();
     }
 
     disconnectedCallback() {
+        unfollowPageTheme(this);
         this._store?.removeEventListener("change", this.onChange);
     }
 

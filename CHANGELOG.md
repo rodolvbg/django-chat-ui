@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shown as it comes, sent when it ends or fails.
 - `django_chat_ui.agui.AgUiAgent`: AI agents that speak AG-UI answer in a
   conversation, as they write.
+- Light or dark as the page around them: Django's admin's theme, the
+  `dark` class of Unfold and Tailwind, or the page's background, before the
+  system's; following a theme switch (`theme.js`).
 - Reactions, where a conversation's `reactions` capability allows them (any
   emoji, or a list).
 - Spanish translation.

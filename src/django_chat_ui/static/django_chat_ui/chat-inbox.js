@@ -14,6 +14,7 @@
 import "./chat-thread.js";
 import { element, format } from "./dom.js";
 import { BUTTONS, CARD, CONTACT } from "./matrix.js";
+import { followPageTheme, unfollowPageTheme } from "./theme.js";
 
 export const INBOX_TEXTS = {
     search: "Search conversations",
@@ -128,11 +129,13 @@ export class ChatInbox extends HTMLElement {
     }
 
     connectedCallback() {
+        followPageTheme(this);
         if (!this.shell) this.build();
         this.render();
     }
 
     disconnectedCallback() {
+        unfollowPageTheme(this);
         this.unlisten();
     }
 

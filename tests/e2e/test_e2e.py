@@ -194,3 +194,42 @@ def test_a_visitor_quicker_than_the_network(live_server, new_page):
     expect(widget.locator(".chat-message").last).to_contain_text(
         "take your usual one", timeout=15000
     )
+
+
+@pytest.mark.parametrize(
+    "system, page_marker, expected",
+    [
+        # Django's admin: its theme chosen against the system's.
+        ("light", "document.documentElement.dataset.theme = 'dark'", "dark"),
+        ("dark", "document.documentElement.dataset.theme = 'light'", "light"),
+        # "auto": the system's.
+        ("dark", "document.documentElement.dataset.theme = 'auto'", "dark"),
+        # Unfold and Tailwind: the "dark" class, or none for light.
+        ("light", "document.documentElement.classList.add('dark')", "dark"),
+        ("dark", "document.body.style.background = '#f9fafb'", "light"),
+    ],
+)
+def test_the_page_theme_wins_over_the_system(
+    agent_page: Page, system, page_marker, expected
+):
+    page = agent_page
+    page.emulate_media(color_scheme=system)
+    page.evaluate(page_marker)
+    inbox = page.locator("chat-inbox")
+    expect(inbox).to_have_attribute("data-page-theme", expected)
+    background = inbox.evaluate(
+        "el => getComputedStyle(el).getPropertyValue('--chat-bg').trim()"
+    )
+    assert background == ("#0d1117" if expected == "dark" else "#fff")
+
+
+def test_its_own_theme_wins_over_the_page(agent_page: Page):
+    page = agent_page
+    page.emulate_media(color_scheme="light")
+    page.evaluate("document.documentElement.classList.add('dark')")
+    inbox = page.locator("chat-inbox")
+    inbox.evaluate("el => el.dataset.theme = 'light'")
+    background = inbox.evaluate(
+        "el => getComputedStyle(el).getPropertyValue('--chat-bg').trim()"
+    )
+    assert background == "#fff"
