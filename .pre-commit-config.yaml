@@ -47,7 +47,6 @@ repos:
     - django-stubs[compatible-mypy]>=5
     - django>=4.2
     - pytest-django>=4.8
-    - channels>=4
     types: [python]
     files: ^(src|example)/
     pass_filenames: false

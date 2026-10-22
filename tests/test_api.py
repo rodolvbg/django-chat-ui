@@ -119,7 +119,7 @@ def test_bad_bodies(customer_api, room):
 
 def test_tokens(customer, conversation):
     token = login().json()["access_token"]
-    api = Api(Client(HTTP_AUTHORIZATION=f"Bearer {token}"), customer)
+    api = Api(Client(headers={"authorization": f"Bearer {token}"}), customer)
     assert api.ok("GET", "/account/whoami")["device_id"]
     # As a query parameter too (deprecated, still allowed).
     assert (
@@ -127,7 +127,9 @@ def test_tokens(customer, conversation):
         == 200
     )
     # No CSRF with a token: it isn't the site's session.
-    csrf = Client(enforce_csrf_checks=True, HTTP_AUTHORIZATION=f"Bearer {token}")
+    csrf = Client(
+        enforce_csrf_checks=True, headers={"authorization": f"Bearer {token}"}
+    )
     assert (
         Api(csrf, customer).send(room_id(conversation), text("Hi")).status_code == 200
     )
@@ -136,7 +138,7 @@ def test_tokens(customer, conversation):
     assert api.error("GET", "/account/whoami", status=401) == "M_UNKNOWN_TOKEN"
 
     first, second = login().json()["access_token"], login().json()["access_token"]
-    Api(Client(HTTP_AUTHORIZATION=f"Bearer {first}")).ok("POST", "/logout/all")
+    Api(Client(headers={"authorization": f"Bearer {first}"})).ok("POST", "/logout/all")
     assert not AccessToken.objects.filter(participant=customer).exists()
     assert second
 
