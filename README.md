@@ -1,8 +1,15 @@
 # django-chat-ui
 
+[![Python tests](https://github.com/rodolvbg/django-chat-ui/actions/workflows/pytest.yml/badge.svg)](https://github.com/rodolvbg/django-chat-ui/actions/workflows/pytest.yml)
+[![JavaScript tests](https://github.com/rodolvbg/django-chat-ui/actions/workflows/js-tests.yml/badge.svg)](https://github.com/rodolvbg/django-chat-ui/actions/workflows/js-tests.yml)
+[![Current version on PyPI](https://img.shields.io/pypi/v/django-chat-ui.svg)](https://pypi.org/project/django-chat-ui/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-chat-ui)](https://pypi.org/project/django-chat-ui/)
+[![PyPI - Django Version](https://img.shields.io/pypi/djversions/django-chat-ui)](https://pypi.org/project/django-chat-ui/)
+[![Downloads](https://static.pepy.tech/personalized-badge/django-chat-ui?period=month&units=international_system&left_color=black&right_color=blue&left_text=Downloads/month)](https://pepy.tech/project/django-chat-ui)
+
 A reusable chat interface — WhatsApp, a chatbot, a company's internal
 chat, a "contact us" widget — that speaks [Matrix](https://matrix.org), and
-a Django app that is a Matrix homeserver for it. Work in progress.
+a Django app that is a Matrix homeserver for it.
 
 - [Matrix](docs/protocol.md), the open standard of chat: the components are
   Matrix clients, and the Django app serves the Client-Server API (without
