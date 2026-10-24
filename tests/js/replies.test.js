@@ -1,13 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-    ANA,
-    flush,
-    ME,
-    messages,
-    says,
-    setup,
-    stopAll,
-} from "./helpers.js";
+import { ANA, flush, ME, messages, says, setup, stopAll } from "./helpers.js";
 
 const room = (capabilities = { replies: true }) => ({
     id: "!r:demo",
@@ -31,7 +23,11 @@ async function thread(capabilities, history) {
                     { sender: ANA.id, content: says("Do you have it in M?") },
                     {
                         sender: ME.id,
-                        content: { msgtype: "m.image", body: "shirt.png", url: "x" },
+                        content: {
+                            msgtype: "m.image",
+                            body: "shirt.png",
+                            url: "x",
+                        },
                     },
                 ],
             ],
@@ -78,7 +74,9 @@ describe("replies in <chat-thread>", () => {
         expect(bar.querySelector(".chat-reply-text").textContent).toBe(
             "Do you have it in M?",
         );
-        expect(document.activeElement).toBe(element.querySelector(".chat-input"));
+        expect(document.activeElement).toBe(
+            element.querySelector(".chat-input"),
+        );
 
         key(type(element, "Yes!"), "Enter");
         expect(bar.hidden).toBe(true); // Done with it.
@@ -103,7 +101,10 @@ describe("replies in <chat-thread>", () => {
         const scroll = vi.fn();
         messages(element)[0].scrollIntoView = scroll;
         quote.click();
-        expect(scroll).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
+        expect(scroll).toHaveBeenCalledWith({
+            block: "center",
+            behavior: "smooth",
+        });
         expect(messages(element)[0].classList).toContain(
             "chat-message--highlight",
         );
@@ -167,7 +168,11 @@ describe("replies in <chat-thread>", () => {
     });
 
     it("leaves templates without a reply", async () => {
-        const { thread: element, server, client } = await thread({
+        const {
+            thread: element,
+            server,
+            client,
+        } = await thread({
             replies: true,
             composer: {
                 mode: "templates",
@@ -210,11 +215,13 @@ describe("replies in <chat-thread>", () => {
             "Message deleted",
         );
         // Deleted: not to be answered.
-        expect(messages(element)[0].querySelector(".chat-reply-button")).toBe(null);
+        expect(messages(element)[0].querySelector(".chat-reply-button")).toBe(
+            null,
+        );
         // Answering the stranger: no name.
         messages(element).at(-1).querySelector(".chat-reply-button").click();
-        expect(
-            element.querySelector(".chat-reply-label").textContent,
-        ).toBe("Replying to ");
+        expect(element.querySelector(".chat-reply-label").textContent).toBe(
+            "Replying to ",
+        );
     });
 });

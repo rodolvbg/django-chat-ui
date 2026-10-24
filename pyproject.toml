@@ -23,6 +23,8 @@ classifiers = [
   "Framework :: Django :: 5.0",
   "Framework :: Django :: 5.1",
   "Framework :: Django :: 5.2",
+  "Framework :: Django :: 6.0",
+  "Framework :: Django :: 6.1",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
@@ -136,10 +138,14 @@ report.skip_covered = true
 [tool.tox]
 env_list = [
   "py314-dj52",
-  "py314-dj52-swapped",
+  "py314-dj60",
+  "py314-dj61",
+  "py314-dj61-swapped",
   "py313-dj51",
   "py312-dj42",
   "py312-dj50",
+  "py312-dj60",
+  "py312-dj61",
   "py310-dj42",
   "py310-dj42-swapped",
   "py310-dj50",
@@ -150,7 +156,7 @@ env.py310-dj42-swapped.commands = [
   [ "pytest", "tests", "--ignore=tests/e2e", "--no-cov", "--ds", "tests.settings_swapped", "{posargs}" ],
 ]
 # A site's own models (the example's helpdesk.Ticket and helpdesk.Contact).
-env.py314-dj52-swapped.commands = [
+env.py314-dj61-swapped.commands = [
   [ "pytest", "tests", "--ignore=tests/e2e", "--no-cov", "--ds", "tests.settings_swapped", "{posargs}" ],
 ]
 # --no-cov: the environments run in parallel, and would share one .coverage.
@@ -163,6 +169,8 @@ env_run_base.deps = [
   { replace = "if", condition = "factor.dj50", then = [ "django>=5.0,<5.1" ], extend = true },
   { replace = "if", condition = "factor.dj51", then = [ "django>=5.1,<5.2" ], extend = true },
   { replace = "if", condition = "factor.dj52", then = [ "django>=5.2,<5.3" ], extend = true },
+  { replace = "if", condition = "factor.dj60", then = [ "django>=6.0,<6.1" ], extend = true },
+  { replace = "if", condition = "factor.dj61", then = [ "django>=6.1,<6.2" ], extend = true },
 ]
 env_run_base.package = "wheel"
 env_run_base.wheel_build_env = ".pkg"
