@@ -33,6 +33,15 @@ THREAD = {
     "react": pgettext_lazy("chat", "React"),
     "you": pgettext_lazy("chat", "You"),
     "deleted": pgettext_lazy("chat", "Message deleted"),
+    "reply": pgettext_lazy("chat", "Reply"),
+    "replyingTo": pgettext_lazy("chat", "Replying to %(name)s"),
+    "cancelReply": pgettext_lazy("chat", "Cancel the reply"),
+    "replyUnavailable": pgettext_lazy("chat", "A message not loaded"),
+    "image": pgettext_lazy("chat", "Photo"),
+    "video": pgettext_lazy("chat", "Video"),
+    "audio": pgettext_lazy("chat", "Audio"),
+    "voice": pgettext_lazy("chat", "Voice message"),
+    "location": pgettext_lazy("chat", "Location"),
 }
 
 INBOX = {

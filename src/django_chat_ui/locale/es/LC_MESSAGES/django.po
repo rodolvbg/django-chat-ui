@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-chat-ui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 12:20+0000\n"
+"POT-Creation-Date: 2026-10-24 16:46+0000\n"
 "PO-Revision-Date: 2026-10-20 14:10+0200\n"
 "Last-Translator: Rodolfo Becerra\n"
 "Language-Team: Spanish\n"
@@ -35,7 +35,7 @@ msgstr "tipo"
 msgid "user, agent, bot, contact, system, or an extension's."
 msgstr "user, agent, bot, contact, system, o el de una extensión."
 
-#: models.py:78 models.py:403
+#: models.py:78 models.py:415
 msgid "name"
 msgstr "nombre"
 
@@ -51,7 +51,7 @@ msgstr "identificador"
 msgid "How the channel knows them: a phone number, an email…"
 msgstr "Cómo lo conoce el canal: un teléfono, un email…"
 
-#: models.py:88 models.py:133 models.py:229 models.py:406
+#: models.py:88 models.py:133 models.py:232 models.py:418
 msgid "created"
 msgstr "creado"
 
@@ -119,55 +119,55 @@ msgstr "participaciones"
 msgid "sender"
 msgstr "remitente"
 
-#: models.py:224 models.py:404
+#: models.py:224 models.py:416
 msgid "type"
 msgstr "tipo"
 
-#: models.py:225
+#: models.py:227
 msgid "state key"
 msgstr "clave de estado"
 
-#: models.py:226
+#: models.py:229
 msgid "content"
 msgstr "contenido"
 
-#: models.py:230
+#: models.py:233
 msgid "transaction id"
 msgstr "id de transacción"
 
-#: models.py:247
+#: models.py:250
 msgid "event"
 msgstr "evento"
 
-#: models.py:248
+#: models.py:251
 msgid "events"
 msgstr "eventos"
 
-#: models.py:370
+#: models.py:382
 msgid "stream entry"
 msgstr "entrada del flujo"
 
-#: models.py:371
+#: models.py:383
 msgid "stream entries"
 msgstr "entradas del flujo"
 
-#: models.py:402
+#: models.py:414
 msgid "file"
 msgstr "archivo"
 
-#: models.py:405
+#: models.py:417
 msgid "size"
 msgstr "tamaño"
 
-#: models.py:409 models.py:410
+#: models.py:421 models.py:422
 msgid "media"
 msgstr "archivos"
 
-#: models.py:431
+#: models.py:443
 msgid "access token"
 msgstr "token de acceso"
 
-#: models.py:432
+#: models.py:444
 msgid "access tokens"
 msgstr "tokens de acceso"
 
@@ -227,51 +227,51 @@ msgstr "Sube antes el archivo."
 msgid "Files of this type can't be sent here."
 msgstr "Aquí no se pueden enviar archivos de este tipo."
 
-#: rules.py:203 views.py:641 views.py:644
+#: rules.py:203 views.py:654 views.py:657
 msgid "The file is too big."
 msgstr "El archivo es demasiado grande."
 
-#: rules.py:228
+#: rules.py:232
 msgid "There is no such template."
 msgstr "No existe esa plantilla."
 
-#: rules.py:258
+#: rules.py:268
 msgid "There is no such button."
 msgstr "No existe ese botón."
 
-#: rules.py:274
+#: rules.py:287
 msgid "It isn't your message."
 msgstr "No es tu mensaje."
 
-#: rules.py:276
+#: rules.py:289
 msgid "That message was deleted."
 msgstr "Ese mensaje se borró."
 
-#: rules.py:279
+#: rules.py:292
 msgid "An edit needs its new content."
 msgstr "Una edición necesita su nuevo contenido."
 
-#: rules.py:294
+#: rules.py:307
 msgid "A reaction annotates an event."
 msgstr "Una reacción anota un evento."
 
-#: rules.py:297
+#: rules.py:310
 msgid "That isn't an emoji."
 msgstr "Eso no es un emoji."
 
-#: rules.py:300
+#: rules.py:313
 msgid "That reaction isn't allowed here."
 msgstr "Esa reacción no se permite aquí."
 
-#: rules.py:303
+#: rules.py:316
 msgid "That message can't be reacted to."
 msgstr "No se puede reaccionar a ese mensaje."
 
-#: rules.py:308
+#: rules.py:322
 msgid "You reacted with it already."
 msgstr "Ya reaccionaste con eso."
 
-#: rules.py:323 rules.py:327
+#: rules.py:338 rules.py:345
 msgid "It isn't yours to delete."
 msgstr "No te corresponde borrarlo."
 
@@ -376,7 +376,7 @@ msgctxt "chat"
 msgid "React"
 msgstr "Reaccionar"
 
-#: texts.py:34 texts.py:50
+#: texts.py:34 texts.py:59
 msgctxt "chat"
 msgid "You"
 msgstr "Tú"
@@ -386,165 +386,186 @@ msgctxt "chat"
 msgid "Message deleted"
 msgstr "Mensaje borrado"
 
+#: texts.py:36
+msgctxt "chat"
+msgid "Reply"
+msgstr "Responder"
+
+#: texts.py:37
+#, python-format
+msgctxt "chat"
+msgid "Replying to %(name)s"
+msgstr "Respondiendo a %(name)s"
+
+#: texts.py:38
+msgctxt "chat"
+msgid "Cancel the reply"
+msgstr "Cancelar la respuesta"
+
 #: texts.py:39
+msgctxt "chat"
+msgid "A message not loaded"
+msgstr "Un mensaje no cargado"
+
+#: texts.py:40 texts.py:54
+msgctxt "chat"
+msgid "Photo"
+msgstr "Foto"
+
+#: texts.py:41 texts.py:55
+msgctxt "chat"
+msgid "Video"
+msgstr "Vídeo"
+
+#: texts.py:42 texts.py:56
+msgctxt "chat"
+msgid "Audio"
+msgstr "Audio"
+
+#: texts.py:43 texts.py:57
+msgctxt "chat"
+msgid "Voice message"
+msgstr "Mensaje de voz"
+
+#: texts.py:44 texts.py:58
+msgctxt "chat"
+msgid "Location"
+msgstr "Ubicación"
+
+#: texts.py:48
 msgctxt "chat"
 msgid "Search conversations"
 msgstr "Buscar conversaciones"
 
-#: texts.py:40
+#: texts.py:49
 msgctxt "chat"
 msgid "No conversations yet."
 msgstr "Aún no hay conversaciones."
 
-#: texts.py:41
+#: texts.py:50
 msgctxt "chat"
 msgid "No conversation matches."
 msgstr "Ninguna conversación coincide."
 
-#: texts.py:42
+#: texts.py:51
 msgctxt "chat"
 msgid "Back to conversations"
 msgstr "Volver a las conversaciones"
 
-#: texts.py:43 texts.py:57
+#: texts.py:52 texts.py:66
 #, python-format
 msgctxt "chat"
 msgid "%(count)s unread"
 msgstr "%(count)s sin leer"
 
-#: texts.py:44
+#: texts.py:53
 msgctxt "chat"
 msgid "Pick a conversation."
 msgstr "Elige una conversación."
 
-#: texts.py:45
-msgctxt "chat"
-msgid "Photo"
-msgstr "Foto"
-
-#: texts.py:46
-msgctxt "chat"
-msgid "Video"
-msgstr "Vídeo"
-
-#: texts.py:47
-msgctxt "chat"
-msgid "Audio"
-msgstr "Audio"
-
-#: texts.py:48
-msgctxt "chat"
-msgid "Voice message"
-msgstr "Mensaje de voz"
-
-#: texts.py:49
-msgctxt "chat"
-msgid "Location"
-msgstr "Ubicación"
-
-#: texts.py:54
+#: texts.py:63
 msgctxt "chat"
 msgid "Chat with us"
 msgstr "Escríbenos"
 
-#: texts.py:55
+#: texts.py:64
 msgctxt "chat"
 msgid "Close the chat"
 msgstr "Cerrar el chat"
 
-#: texts.py:56
+#: texts.py:65
 msgctxt "chat"
 msgid "Chat"
 msgstr "Chat"
 
-#: views.py:112
+#: views.py:113
 msgid "Log in again."
 msgstr "Vuelve a iniciar sesión."
 
-#: views.py:116
+#: views.py:117
 msgid "Log in to chat."
 msgstr "Inicia sesión para chatear."
 
-#: views.py:118
+#: views.py:119
 msgid "The CSRF token is missing or wrong."
 msgstr "Falta el token CSRF o no es correcto."
 
-#: views.py:137
+#: views.py:138
 msgid "The body isn't JSON."
 msgstr "El cuerpo no es JSON."
 
-#: views.py:139
+#: views.py:140
 msgid "The body must be an object."
 msgstr "El cuerpo debe ser un objeto."
 
-#: views.py:152
+#: views.py:153
 msgid "You aren't in this room."
 msgstr "No estás en esta sala."
 
-#: views.py:158
+#: views.py:159
 msgid "That isn't you."
 msgstr "Ese no eres tú."
 
-#: views.py:179 views.py:194 views.py:393
+#: views.py:178 views.py:193 views.py:404
 msgid "Unrecognized request."
 msgstr "Petición no reconocida."
 
-#: views.py:212
+#: views.py:211
 msgid "Only passwords can log in."
 msgstr "Solo se puede iniciar sesión con contraseña."
 
-#: views.py:217
+#: views.py:216
 msgid "A user and their password, please."
 msgstr "Un usuario y su contraseña, por favor."
 
-#: views.py:226
+#: views.py:225
 msgid "Wrong user or password."
 msgstr "Usuario o contraseña incorrectos."
 
-#: views.py:304
+#: views.py:305
 msgid "There is no such filter."
 msgstr "No existe ese filtro."
 
-#: views.py:328
+#: views.py:329
 msgid "There is no such data."
 msgstr "No existen esos datos."
 
-#: views.py:360
+#: views.py:361
 msgid "There is no such user."
 msgstr "No existe ese usuario."
 
-#: views.py:364
+#: views.py:365
 msgid "They have no such field."
 msgstr "No tiene ese campo."
 
-#: views.py:422
+#: views.py:433
 msgid "invite must list user IDs."
 msgstr "invite debe listar IDs de usuario."
 
-#: views.py:425 views.py:428
+#: views.py:436 views.py:439
 msgid "There is no such participant."
 msgstr "No existe ese participante."
 
-#: views.py:434
+#: views.py:445
 msgid "That isn't a channel."
 msgstr "Eso no es un canal."
 
-#: views.py:436
+#: views.py:447
 msgid "You can't start that conversation."
 msgstr "No puedes empezar esa conversación."
 
-#: views.py:527
+#: views.py:540
 msgid "The state of this room is the server's."
 msgstr "El estado de esta sala es cosa del servidor."
 
-#: views.py:534
+#: views.py:547
 msgid "There is no such state."
 msgstr "No existe ese estado."
 
-#: views.py:599
+#: views.py:612
 msgid "Unknown receipt type."
 msgstr "Tipo de recibo desconocido."
 
-#: views.py:671
+#: views.py:686
 msgid "There is no such file."
 msgstr "No existe ese archivo."

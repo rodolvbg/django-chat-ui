@@ -48,6 +48,12 @@ Reactions, where a conversation allows them (here, only some emojis):
 
 ![Reactions to a message of the team, and the picker open on another](docs/screenshots/reactions.png)
 
+Replies, where a conversation allows them (`"replies": True`): "↩" on a
+message answers it, and the answer quotes it (choosing the quote brings
+the message into view):
+
+![An answer quoting the customer's question](docs/screenshots/replies.png)
+
 ## With Django
 
 ```bash

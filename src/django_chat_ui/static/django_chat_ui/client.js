@@ -206,9 +206,20 @@ export class ChatClient extends EventTarget {
     }
 
     /** Send an event; a message shows at once ("sending"), then as the
-     * server has it, or "failed". The same `txnId` is never sent twice. */
-    async send(room, content, { type = "m.room.message", txnId } = {}) {
+     * server has it, or "failed". The same `txnId` is never sent twice.
+     * `replyTo`: the event ID of the message it answers. */
+    async send(
+        room,
+        content,
+        { type = "m.room.message", txnId, replyTo } = {},
+    ) {
         const txn = txnId ?? newTxnId();
+        if (replyTo) {
+            content = {
+                ...content,
+                "m.relates_to": { "m.in_reply_to": { event_id: replyTo } },
+            };
+        }
         const store = this.room(room);
         if (!store.findLocal(txn)) {
             store.addLocal({

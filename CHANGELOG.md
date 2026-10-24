@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Light or dark as the page around them: Django's admin's theme, the
   `dark` class of Unfold and Tailwind, or the page's background, before the
   system's; following a theme switch (`theme.js`).
+- Replies, where a conversation's `replies` capability allows them: "↩" on
+  a message answers it (a bar over the composer says which, Escape cancels
+  it), and the answer quotes it, leading to it; `ChatClient.send(…,
+  { replyTo })`.
 - Reactions, where a conversation's `reactions` capability allows them (any
   emoji, or a list).
 - Spanish translation.

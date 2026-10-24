@@ -28,6 +28,7 @@ import {
     SYSTEM,
     TEMPLATE,
 } from "./matrix.js";
+import { preview } from "./preview.js";
 import { followPageTheme, unfollowPageTheme } from "./theme.js";
 
 export const TEXTS = {
@@ -53,7 +54,18 @@ export const TEXTS = {
     react: "React",
     you: "You",
     deleted: "Message deleted",
+    reply: "Reply",
+    replyingTo: "Replying to %(name)s",
+    cancelReply: "Cancel the reply",
+    replyUnavailable: "A message not loaded",
+    image: "Photo",
+    video: "Video",
+    audio: "Audio",
+    voice: "Voice message",
+    location: "Location",
 };
+
+const HIGHLIGHT_FOR = 1500;
 
 const STATUS_MARKS = { sending: "🕓", sent: "✓", delivered: "✓✓", read: "✓✓" };
 
@@ -67,6 +79,8 @@ export class ChatThread extends HTMLElement {
         this.typingTimer = null;
         /** The message whose reaction picker is open. */
         this.picking = null;
+        /** The message the next one answers. */
+        this.replying = null;
     }
 
     static get observedAttributes() {
@@ -139,7 +153,14 @@ export class ChatThread extends HTMLElement {
             event.preventDefault();
             this.submit();
         });
-        this.shell.append(this.log, this.typingLine, this.composer);
+        this.replyBar = element("div", "chat-reply-bar");
+        this.replyBar.hidden = true;
+        this.shell.append(
+            this.log,
+            this.typingLine,
+            this.replyBar,
+            this.composer,
+        );
         this.append(this.shell);
     }
 
@@ -152,6 +173,7 @@ export class ChatThread extends HTMLElement {
         this.renderEarlier();
         this.renderMessages();
         this.renderTyping();
+        this.renderReplyBar();
         this.renderComposer();
         if (atBottom) this.log.scrollTop = this.log.scrollHeight;
         this.markRead();
@@ -265,6 +287,9 @@ export class ChatThread extends HTMLElement {
             node.append(element("div", "chat-author", author.name));
         }
         const bubble = element("div", "chat-bubble");
+        if (message.replyTo && !system) {
+            bubble.append(this.renderQuote(message.replyTo, participants, me));
+        }
         if (message.redacted) {
             bubble.append(
                 element("div", "chat-part chat-deleted", this._texts.deleted),
@@ -296,6 +321,9 @@ export class ChatThread extends HTMLElement {
             const meta = this.renderMeta(message, own, receipts);
             if (this.reactable(message, conversation).length) {
                 meta.append(this.renderReactButton(message));
+            }
+            if (this.repliable(message, conversation)) {
+                meta.append(this.renderReplyButton(message));
             }
             node.append(meta);
         }
@@ -370,6 +398,122 @@ export class ChatThread extends HTMLElement {
             row.append(picker);
         }
         return row;
+    }
+
+    // Replies ----------------------------------------------------------------
+
+    /** Whether one can answer this message here. */
+    repliable(message, conversation) {
+        return (
+            Boolean(capability(conversation, "replies")) &&
+            !message.redacted &&
+            !message.streaming &&
+            !message.id.startsWith("~")
+        );
+    }
+
+    renderReplyButton(message) {
+        const button = element("button", "chat-reply-button", "↩");
+        button.type = "button";
+        button.title = this._texts.reply;
+        button.setAttribute("aria-label", this._texts.reply);
+        button.addEventListener("click", () => this.startReply(message.id));
+        return button;
+    }
+
+    /** Answer `id` with the next message. */
+    startReply(id) {
+        this.replying = id;
+        this.render();
+        this.input?.focus();
+    }
+
+    cancelReply() {
+        this.replying = null;
+        this.render();
+        this.input?.focus();
+    }
+
+    /** Who wrote a message, and what it's about: for quotes. */
+    quoted(id, participants, me) {
+        const message = this._store.messages.find((m) => m.id === id);
+        if (!message) return null;
+        const name =
+            message.sender === me
+                ? this._texts.you
+                : (participants.get(message.sender)?.name ?? "");
+        return { name, text: preview(message, this._texts) };
+    }
+
+    /** The quote of the message `id` answers; to it, when chosen. */
+    renderQuote(id, participants, me) {
+        const quote = element("button", "chat-quote");
+        quote.type = "button";
+        const found = this.quoted(id, participants, me);
+        if (!found) {
+            quote.disabled = true;
+            quote.append(
+                element(
+                    "span",
+                    "chat-quote-text",
+                    this._texts.replyUnavailable,
+                ),
+            );
+            return quote;
+        }
+        quote.append(
+            element("span", "chat-quote-author", found.name),
+            element("span", "chat-quote-text", found.text),
+        );
+        quote.setAttribute("aria-label", `${found.name}: ${found.text}`);
+        quote.addEventListener("click", () => this.reveal(id));
+        return quote;
+    }
+
+    /** Bring a message into view, marked for a moment. */
+    reveal(id) {
+        const node = this.messageNode(id);
+        if (!node) return;
+        node.scrollIntoView?.({ block: "center", behavior: "smooth" });
+        node.classList.add("chat-message--highlight");
+        setTimeout(
+            () => node.classList.remove("chat-message--highlight"),
+            HIGHLIGHT_FOR,
+        );
+    }
+
+    /** "Replying to Ana: …", over the composer, while there's a reply. */
+    renderReplyBar() {
+        const conversation = this._store.conversation;
+        const found =
+            this.replying &&
+            capability(conversation, "replies") &&
+            composerMode(conversation) === "free"
+                ? this.quoted(
+                      this.replying,
+                      this._store.participants,
+                      this._client.me,
+                  )
+                : null;
+        this.replyBar.hidden = !found;
+        if (!found) {
+            this.replyBar.replaceChildren();
+            return;
+        }
+        const label = element(
+            "div",
+            "chat-reply-label",
+            format(this._texts.replyingTo, { name: found.name }),
+        );
+        const text = element("div", "chat-reply-text", found.text);
+        const cancel = element("button", "chat-reply-cancel", "✕");
+        cancel.type = "button";
+        cancel.title = this._texts.cancelReply;
+        cancel.setAttribute("aria-label", this._texts.cancelReply);
+        cancel.addEventListener("click", () => this.cancelReply());
+        const body = element("div", "chat-reply-body");
+        body.append(label, text);
+        this.replyBar.replaceChildren(body, cancel);
     }
 
     /** The button that opens the picker, next to the time. */
@@ -527,6 +671,9 @@ export class ChatThread extends HTMLElement {
             ) {
                 event.preventDefault();
                 this.submit();
+            } else if (event.key === "Escape" && this.replying) {
+                event.preventDefault();
+                this.cancelReply();
             }
         });
         input.addEventListener("input", () => this.typed());
@@ -650,21 +797,33 @@ export class ChatThread extends HTMLElement {
             const template = templates.find((item) => item.id === select.value);
             if (!template) return;
             const params = this.composer.querySelector(".chat-template-params");
-            this.send({
-                msgtype: TEMPLATE,
-                body: this.templateText(template, params),
-                [TEMPLATE]: {
-                    id: template.id,
-                    params: this.templateValues(params),
+            this.send(
+                {
+                    msgtype: TEMPLATE,
+                    body: this.templateText(template, params),
+                    [TEMPLATE]: {
+                        id: template.id,
+                        params: this.templateValues(params),
+                    },
                 },
-            });
+                { reply: false },
+            );
         }
     }
 
-    send(content) {
-        this._client.send(this._store.id, content).catch(() => {
-            // Shown on the message itself ("failed", with Retry).
-        });
+    /** Send a message; it answers the one being replied to (`reply`), if
+     * the conversation takes replies. */
+    send(content, { reply = true } = {}) {
+        const replyTo =
+            reply && capability(this._store.conversation, "replies")
+                ? this.replying
+                : null;
+        if (replyTo) this.replying = null;
+        this._client
+            .send(this._store.id, content, replyTo ? { replyTo } : {})
+            .catch(() => {
+                // Shown on the message itself ("failed", with Retry).
+            });
     }
 
     async attach(input) {

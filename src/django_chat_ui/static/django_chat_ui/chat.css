@@ -797,3 +797,98 @@ chat-widget[open] .chat-widget-icon::before {
 .chat-widget-panel chat-thread {
     flex: 1;
 }
+
+/* Replies: the quote of the message answered, in the bubble; the bar over
+   the composer while replying. */
+.chat-quote {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-width: 100%;
+    margin: 0;
+    padding: 4px 8px;
+    border: none;
+    border-left: 3px solid var(--chat-accent);
+    border-radius: 6px;
+    background: rgb(127 127 127 / 12%);
+    color: inherit;
+    font: inherit;
+    font-size: 0.8125rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.chat-quote:disabled {
+    cursor: default;
+}
+
+.chat-quote-author {
+    color: var(--chat-accent);
+    font-weight: 600;
+}
+
+.chat-quote-text,
+.chat-reply-text {
+    overflow: hidden;
+    color: var(--chat-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-reply-button {
+    padding: 0 4px;
+    border: none;
+    background: none;
+    color: var(--chat-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.chat-reply-button:hover,
+.chat-reply-button:focus-visible {
+    color: var(--chat-accent);
+}
+
+.chat-reply-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--chat-border);
+    border-left: 3px solid var(--chat-accent);
+    font-size: 0.8125rem;
+}
+
+.chat-reply-bar[hidden] {
+    display: none;
+}
+
+.chat-reply-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-reply-label {
+    color: var(--chat-accent);
+    font-weight: 600;
+}
+
+.chat-reply-cancel {
+    border: none;
+    background: none;
+    color: var(--chat-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.chat-message--highlight .chat-bubble {
+    outline: 2px solid var(--chat-accent);
+    outline-offset: 2px;
+    transition: outline-color 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-message--highlight .chat-bubble {
+        transition: none;
+    }
+}

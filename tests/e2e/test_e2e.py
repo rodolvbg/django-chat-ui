@@ -233,3 +233,31 @@ def test_its_own_theme_wins_over_the_page(agent_page: Page):
         "el => getComputedStyle(el).getPropertyValue('--chat-bg').trim()"
     )
     assert background == "#fff"
+
+
+def test_replying_to_a_message(agent_page: Page, visitor_page: Page):
+    agent, visitor = agent_page, visitor_page
+    visitor.locator(".chat-widget-launcher").click()
+    widget = visitor.locator("chat-widget chat-thread")
+    widget.locator(".chat-input").fill("Do you have the blue one in M?")
+    widget.locator(".chat-input").press("Enter")
+    widget.locator(".chat-input").fill("And in L?")
+    widget.locator(".chat-input").press("Enter")
+
+    agent.locator(".chat-conversation").first.click()
+    thread = agent.locator("chat-inbox chat-thread")
+    asked = thread.locator(".chat-message", has_text="Do you have the blue one in M?")
+    asked.get_by_role("button", name="Reply").click()
+    expect(thread.locator(".chat-reply-bar")).to_contain_text(
+        "Do you have the blue one in M?"
+    )
+    thread.locator(".chat-input").fill("Yes, in M we do.")
+    thread.locator(".chat-input").press("Enter")
+    expect(thread.locator(".chat-reply-bar")).to_be_hidden()
+
+    # The visitor sees which question it answers.
+    answer = widget.locator(".chat-message", has_text="Yes, in M we do.")
+    expect(answer.locator(".chat-quote")).to_contain_text(
+        "Do you have the blue one in M?"
+    )
+    expect(answer.locator(".chat-quote-author")).to_have_text("You")
