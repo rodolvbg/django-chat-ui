@@ -227,6 +227,22 @@ function buttons(list, context, { persist = false } = {}) {
     // message comes, they're done (unless `persist`).
     const later = context.store?.lastMessage?.id !== message.id;
     for (const button of list) {
+        if (button.url !== undefined) {
+            // A link: it opens its URL (another tab), always; nothing is
+            // sent. Not one to follow: not shown.
+            const href = safeUrl(button.url);
+            if (!href) continue;
+            const node = element(
+                "a",
+                `chat-button chat-button--${button.style ?? "secondary"} chat-button--link`,
+                button.label,
+            );
+            node.href = href;
+            node.target = "_blank";
+            node.rel = "noopener noreferrer";
+            row.append(node);
+            continue;
+        }
         const node = element(
             "button",
             `chat-button chat-button--${button.style ?? "secondary"}`,

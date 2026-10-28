@@ -15,10 +15,12 @@
         },
         "button": {
             "type": "object",
-            "required": ["id"],
+            "description": "A quick reply (id), or a link (url: https:, or a path of the site).",
+            "anyOf": [{ "required": ["id"] }, { "required": ["url"] }],
             "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "label": { "type": "string" },
+                "url": { "type": "string", "pattern": "^(https://|/(?!/))" },
                 "style": { "enum": ["primary", "secondary", "danger"] }
             }
         },

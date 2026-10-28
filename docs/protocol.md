@@ -220,6 +220,13 @@ the message's own have the labels too, for other clients. `style`:
 `primary`, `secondary` (default), `danger`. Without `persist`, they're done
 once one is used or another message comes.
 
+A button with a `url` (`https:`, or a path of the site) is a link — "Track
+your order", "Pay" — instead of a reply: `{ "label", "url", "style"? }`
+(no `id` needed). It opens the URL (in another tab) and sends nothing, so
+it's always usable, and a server refuses it as an `action`. In `body` and
+`formatted_body` it's its label and its URL (`• Track it:
+https://…`, a link), for other clients.
+
 Using one is sending its answer — its label, as WhatsApp writes it — with
 the `action` block, as a reply to the message:
 

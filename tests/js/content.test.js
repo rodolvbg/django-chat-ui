@@ -159,6 +159,37 @@ describe("content.js", () => {
         ).toBe("");
     });
 
+    it("renders link buttons: they open their URL, always", () => {
+        const options = [
+            {
+                label: "Track it",
+                url: "https://track.example/A-1",
+                style: "primary",
+            },
+            { label: "Invoice", url: "/orders/1/invoice/" },
+            { label: "Bad", url: "javascript:alert(1)" },
+            { id: "n", label: "No" },
+        ];
+        const ctx = context({ store: { lastMessage: { id: "$2" } } });
+        const node = renderContent(withButtons("Your order:", options), ctx);
+        const [track, invoice, ...rest] = node.querySelectorAll("a");
+        expect(rest).toHaveLength(0); // Not one to follow: not shown.
+        expect(track.className).toBe(
+            "chat-button chat-button--primary chat-button--link",
+        );
+        expect(track.href).toBe("https://track.example/A-1");
+        expect(track.target).toBe("_blank");
+        expect(track.rel).toBe("noopener noreferrer");
+        expect(track.textContent).toBe("Track it");
+        expect(invoice.href).toBe(
+            `${window.location.origin}/orders/1/invoice/`,
+        );
+        // Another message came: the quick reply is done, the links aren't.
+        expect(node.querySelector("button").disabled).toBe(true);
+        track.click();
+        expect(ctx.act).not.toHaveBeenCalled();
+    });
+
     it("renders link previews", () => {
         const node = render({
             msgtype: "m.text",

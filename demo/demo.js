@@ -29,7 +29,9 @@ const minutesAgo = (n) => Date.now() - n * 60000;
 function withButtons(body, buttons) {
     return {
         msgtype: "m.text",
-        body: `${body}\n\n${buttons.map((b) => `• ${b.label}`).join("\n")}`,
+        body: `${body}\n\n${buttons
+            .map((b) => `• ${b.url ? `${b.label}: ${b.url}` : b.label}`)
+            .join("\n")}`,
         [BUTTONS]: { body, buttons },
     };
 }
@@ -147,6 +149,24 @@ const answers = {
 
 server.onAction = (_event, server, button) => {
     server.stream("!bot:demo", bot.id, answers[button?.id] ?? ["OK."]);
+    if (button?.id === "order") {
+        // A link button: it opens the page, it doesn't answer.
+        setTimeout(
+            () =>
+                server.post(
+                    "!bot:demo",
+                    bot.id,
+                    withButtons("You can follow it here:", [
+                        {
+                            label: "Track A-1029",
+                            url: "https://www.ups.com/track",
+                            style: "primary",
+                        },
+                    ]),
+                ),
+            1500,
+        );
+    }
 };
 server.onMessage = (event) => {
     const room = [...server.rooms.values()].find((r) =>

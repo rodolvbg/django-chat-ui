@@ -240,6 +240,19 @@ def test_buttons(customer_api, room, conversation, agent, settings):
         ACTION: {"event_id": "$999", "button": "a"},
     }
     assert customer_api.refused(room, gone) == "M_NOT_FOUND"
+    # A link button opens its URL: it isn't used as an answer.
+    links = services.send(
+        conversation,
+        agent,
+        content.text("Track", buttons=[{"label": "Go", "url": "https://a.example"}]),
+    )
+    for button in ("go", None):
+        link = {
+            "msgtype": "m.text",
+            "body": "x",
+            ACTION: {"event_id": links.event_id, "button": button},
+        }
+        assert customer_api.refused(room, link) == "M_NOT_FOUND"
     # In a bot's menu (actions), buttons only.
     services.update_conversation(
         conversation, capabilities={"composer": {"mode": "actions"}}

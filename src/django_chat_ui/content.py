@@ -33,24 +33,47 @@ def _label(button: Button) -> str:
     return str(button.get("label", button.get("id", "")))
 
 
+def _link_url(button: Button) -> str | None:
+    """A link button's URL (``https:``, or a path of this site); None: a
+    quick reply."""
+    url = button.get("url")
+    if url is None:
+        return None
+    if not isinstance(url, str) or not (
+        url.startswith("https://") or (url.startswith("/") and not url.startswith("//"))
+    ):
+        raise ValueError(f"A button's url is https: or a path, not {url!r}.")
+    return url
+
+
+def _option(button: Button) -> str:
+    url = _link_url(button)
+    return f"{_label(button)}: {url}" if url else _label(button)
+
+
+def _option_html(button: Button) -> str:
+    label = html.escape(_label(button), quote=False)
+    url = _link_url(button)
+    return f'<a href="{html.escape(url)}">{label}</a>' if url else label
+
+
 def _with_buttons(
     content: dict[str, Any], buttons: list[Button] | None, persist: bool
 ) -> dict[str, Any]:
     """Quick replies under a message: this package's block (with the text
     before them, which its clients show), and their labels in ``body`` and
-    ``formatted_body`` (a client without them answers by writing one)."""
+    ``formatted_body`` (a client without them answers by writing one). A
+    button with a ``url`` is a link: there, it's the label and its URL."""
     if not buttons:
         return content
     block: dict[str, Any] = {"buttons": buttons, "body": content["body"]}
     if persist:
         block["persist"] = True
-    options = "\n".join(f"• {_label(button)}" for button in buttons)
+    options = "\n".join(f"• {_option(button)}" for button in buttons)
     content["body"] = f"{content['body']}\n\n{options}" if content["body"] else options
     if "formatted_body" in content:
         block["formatted_body"] = content["formatted_body"]
-        items = "".join(
-            f"<li>{html.escape(_label(button), quote=False)}</li>" for button in buttons
-        )
+        items = "".join(f"<li>{_option_html(button)}</li>" for button in buttons)
         content["formatted_body"] += f"<ul>{items}</ul>"
     content[BUTTONS] = block
     return content
@@ -66,7 +89,9 @@ def text(
 ) -> dict[str, Any]:
     """A text (``markdown``: with its HTML, ``formatted_body``), and quick
     replies (``buttons``: ``[{"id", "label", "style"?}]``; ``persist``: they
-    stay usable after another message)."""
+    stay usable after another message). A button with a ``url``
+    (``https:``, or a path of this site) opens it instead: ``{"label",
+    "url", "style"?}``, always usable, and nothing is sent."""
     content: dict[str, Any] = {"msgtype": msgtype, "body": body}
     if markdown:
         content.update(

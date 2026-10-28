@@ -240,6 +240,10 @@ services.update_conversation(
 )
 ```
 
+A button with a `url` opens it instead of answering — `{"label": "Track
+it", "url": "https://…"}` (`https:`, or a path of the site): always
+usable, nothing is sent.
+
 `content` has `text` (with `markdown=True`, `buttons=`), `notice`, `system`,
 `image`, `video`, `audio`, `file`, `location`, `contact`, `link`, `card` and
 `template`. `services` also has `create_conversation`, `add_participant`,

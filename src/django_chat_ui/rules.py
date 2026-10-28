@@ -264,7 +264,8 @@ class Rules:
             ),
             None,
         )
-        if button is None:
+        # A link button opens its URL: there's nothing to answer.
+        if button is None or "url" in button:
             raise MatrixError("M_NOT_FOUND", _("There is no such button."))
         label = str(button.get("label", button["id"]))
         return Checked(

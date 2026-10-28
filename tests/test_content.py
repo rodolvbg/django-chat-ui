@@ -1,5 +1,7 @@
 """The contents of messages, and what other Matrix clients show of them."""
 
+import pytest
+
 from django_chat_ui import content
 from django_chat_ui.matrix import BUTTONS, CARD, CONTACT, HTML, LINK, SYSTEM, TEMPLATE
 
@@ -91,3 +93,30 @@ def test_location_contact_link_card_template():
         "body": "Hi Ana",
         TEMPLATE: {"id": "t1", "params": {"name": "Ana"}},
     }
+
+
+def test_link_buttons():
+    links = [
+        {"label": "Track <it>", "url": "https://track.example/?a=1&b=2"},
+        {"label": "Invoice", "url": "/orders/1/invoice/"},
+        {"id": "no", "label": "No"},
+    ]
+    message = content.text("*Your order*", markdown=True, buttons=links)
+    assert message[BUTTONS]["buttons"] == links
+    # Other clients: the label and its URL.
+    assert message["body"] == (
+        "Your order\n\n• Track <it>: https://track.example/?a=1&b=2"
+        "\n• Invoice: /orders/1/invoice/\n• No"
+    )
+    assert message["formatted_body"].endswith(
+        '<ul><li><a href="https://track.example/?a=1&amp;b=2">Track &lt;it&gt;</a>'
+        '</li><li><a href="/orders/1/invoice/">Invoice</a></li><li>No</li></ul>'
+    )
+
+
+@pytest.mark.parametrize(
+    "url", ["javascript:alert(1)", "http://plain.example", "//elsewhere.example", 3]
+)
+def test_link_buttons_only_https_or_a_path(url):
+    with pytest.raises(ValueError, match="https: or a path"):
+        content.text("Go", buttons=[{"label": "Go", "url": url}])

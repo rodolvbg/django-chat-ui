@@ -279,6 +279,30 @@ chat-thread[hidden] {
     color: var(--chat-error);
 }
 
+/* A link button: opens its URL; looks like the others (over the bubble's
+   links' color). */
+.chat-button--link {
+    display: inline-block;
+    text-decoration: none;
+}
+
+.chat-bubble a.chat-button--link {
+    color: var(--chat-accent);
+}
+
+.chat-bubble a.chat-button--primary {
+    color: var(--chat-accent-fg);
+}
+
+.chat-bubble a.chat-button--danger {
+    color: var(--chat-error);
+}
+
+.chat-button--link::after {
+    /* Not read out: it's only a sign. */
+    content: " ↗" / "";
+}
+
 .chat-button:disabled {
     opacity: 0.5;
     cursor: default;
