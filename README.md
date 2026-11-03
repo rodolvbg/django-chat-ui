@@ -338,6 +338,31 @@ registerMsgtype("com.acme.order", (content, context) => {
 });
 ```
 
+### Links in a text
+
+In a plain text (one from WhatsApp, say), URLs, emails and phone numbers
+are links: `https://…` and `www.…` (as `https://`) open in another tab
+(only those `safeUrl()` lets through: `https`, or the site's own; an
+`http://` one stays text), an email opens `mailto:`, and a phone `tel:` —
+only what clearly is one: with its `+` prefix, or of 9 digits or more
+(spaces, hyphens and dots between them), so codes, dates and amounts stay
+text. A sentence's final punctuation (`. , ; : ! ?`, a `)` it didn't open)
+stays out of a URL.
+
+On by default. `CHAT_UI["LINKIFY"]`: `False` for none, or by kind,
+`{"phone": False}` (`url`, `email`, `phone`). In the page, the same with
+`setLinkify()`, and linkifiers of a site's own:
+
+```js
+import { link, registerLinkifier } from "…/django_chat_ui/content.js";
+
+// "#1234": its order. A Node, or null to leave it as text.
+registerLinkifier("order", {
+    pattern: /#(\d{4,})/g,
+    link: (match) => link(`/orders/${match[1]}/`, match[0]),
+});
+```
+
 ### Settings
 
 ```python
@@ -347,6 +372,7 @@ CHAT_UI = {
     "SYNC_TIMEOUT": 30,  # seconds a long poll of /sync waits, at most
     "POLL_INTERVAL": 0.5,  # seconds between reads of what's new
     "SETTLE": 1.0,  # seconds an entry missing in the log is waited for
+    "LINKIFY": True,  # URLs, emails, phones in a text: links (False: none)
 }
 ```
 

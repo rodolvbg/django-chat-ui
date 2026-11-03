@@ -13,6 +13,7 @@
 import "./chat-inbox.js";
 import "./chat-widget.js";
 import { ChatClient } from "./client.js";
+import { setLinkify } from "./content.js";
 
 function readConfig() {
     const node = document.getElementById("chat-ui-config");
@@ -25,6 +26,9 @@ function readConfig() {
 }
 
 export const config = readConfig();
+
+// Which URLs, emails and phones in a text are links (CHAT_UI["LINKIFY"]).
+if (config) setLinkify(config.linkify);
 
 export const client = config
     ? new ChatClient({

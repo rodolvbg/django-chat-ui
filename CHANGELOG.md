@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   opens it, in another tab, instead of answering — "Track your order",
   "Pay". Always usable, nothing is sent; a server refuses it as an
   `action`. Other clients get its label and its URL.
+- Links in plain text: URLs (`https://`, `http://`, `www.`, as `https://`),
+  emails (`mailto:`) and phone numbers (`tel:`, only with a `+` prefix or
+  of 9 digits or more) become links; a sentence's final punctuation, and a
+  `)` it didn't open, stay out of a URL. On by default:
+  `CHAT_UI["LINKIFY"]` (`False`, or by kind: `{"phone": False}`), or
+  `setLinkify()` in the page; `registerLinkifier()` adds a site's own.
 
 ## [0.1.0] - 2026-10-24
 

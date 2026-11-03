@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+    link,
+    registerLinkifier,
     registerMsgtype,
     renderContent,
     renderHtml,
     renderMarkdown,
     safeUrl,
+    setLinkify,
+    unregisterLinkifier,
     unregisterMsgtype,
 } from "../../src/django_chat_ui/static/django_chat_ui/content.js";
 import {
@@ -423,5 +427,117 @@ describe("content.js", () => {
         expect(
             render({ msgtype: "com.acme.order", body: "Order" }).textContent,
         ).toBe("Order");
+    });
+});
+
+describe("links in a text", () => {
+    afterEach(() => {
+        setLinkify(true);
+        unregisterLinkifier("order");
+        unregisterLinkifier("broken");
+    });
+
+    const text = (body) => render({ msgtype: "m.text", body });
+    const links = (node) =>
+        [...node.querySelectorAll("a")].map((a) => [
+            a.textContent,
+            a.getAttribute("href"),
+        ]);
+
+    it("URLs: https, www (as https), without the sentence's punctuation", () => {
+        const node = text(
+            "See https://example.com/a?b=1, or www.example.org. (Also https://en.wikipedia.org/wiki/Foo_(bar)) Wow https://x.com/y!?",
+        );
+        expect(links(node)).toEqual([
+            ["https://example.com/a?b=1", "https://example.com/a?b=1"],
+            ["www.example.org", "https://www.example.org/"],
+            [
+                "https://en.wikipedia.org/wiki/Foo_(bar)",
+                "https://en.wikipedia.org/wiki/Foo_(bar)",
+            ],
+            ["https://x.com/y", "https://x.com/y"],
+        ]);
+        expect(node.textContent).toBe(
+            "See https://example.com/a?b=1, or www.example.org. (Also https://en.wikipedia.org/wiki/Foo_(bar)) Wow https://x.com/y!?",
+        );
+        const anchor = node.querySelector("a");
+        expect(anchor.target).toBe("_blank");
+        expect(anchor.rel).toBe("noopener noreferrer");
+    });
+
+    it("an http URL not to follow (link()'s safeUrl) stays text", () => {
+        const node = text("Old http://example.com/x.");
+        expect(links(node)).toEqual([]);
+        expect(node.textContent).toBe("Old http://example.com/x.");
+    });
+
+    it("emails: mailto", () => {
+        const node = text("Write to ana.p+chat@mail.example.es, please.");
+        expect(links(node)).toEqual([
+            ["ana.p+chat@mail.example.es", "mailto:ana.p+chat@mail.example.es"],
+        ]);
+    });
+
+    it("phones: tel, only what clearly is one", () => {
+        const node = text(
+            "Call +34 600 123 456 or 600-123-456 or 91.123.45.67 or +1 (no)",
+        );
+        expect(links(node)).toEqual([
+            ["+34 600 123 456", "tel:+34600123456"],
+            ["600-123-456", "tel:600123456"],
+            ["91.123.45.67", "tel:911234567"],
+        ]);
+        // Codes, dates, amounts, times, too long, or part of a word: text.
+        const none = text(
+            "Code 12345, on 30-10-2026 at 10:30, 1.234.567,89 €, 123.456.789,00 €, ref A600123456, 1234567890123456",
+        );
+        expect(links(none)).toEqual([]);
+    });
+
+    it("on each line, and in a card's text", () => {
+        const node = text("a@b.co\nhttps://c.com");
+        expect(node.innerHTML).toBe(
+            '<a href="mailto:a@b.co">a@b.co</a><br><a href="https://c.com/" target="_blank" rel="noopener noreferrer">https://c.com</a>',
+        );
+        const card = render({
+            msgtype: CARD,
+            body: "",
+            [CARD]: { text: "x@y.io" },
+        });
+        expect(links(card)).toEqual([["x@y.io", "mailto:x@y.io"]]);
+    });
+
+    it("can be turned off, all or by kind", () => {
+        const body = "x@y.io +34 600 123 456 https://c.com";
+        setLinkify(false);
+        expect(links(text(body))).toEqual([]);
+        setLinkify(true);
+        setLinkify({ phone: false, email: true });
+        expect(links(text(body)).map(([, href]) => href)).toEqual([
+            "mailto:x@y.io",
+            "https://c.com/",
+        ]);
+        setLinkify({ phone: true });
+        expect(links(text(body))).toHaveLength(3);
+        setLinkify(undefined); // As it was.
+        expect(links(text(body))).toHaveLength(3);
+    });
+
+    it("takes linkifiers of a site's own", () => {
+        registerLinkifier("order", {
+            pattern: /#(\d{4,})/, // Not global: made so.
+            link: (match) => link(`/orders/${match[1]}/`, match[0]),
+        });
+        registerLinkifier("broken", {
+            pattern: /x*/g, // Empty matches, and it throws.
+            link: () => {
+                throw new Error("broken");
+            },
+        });
+        const node = text("Order #1234 and #12, xx");
+        expect(links(node)).toEqual([
+            ["#1234", "http://localhost:3000/orders/1234/"],
+        ]);
+        expect(node.textContent).toBe("Order #1234 and #12, xx");
     });
 });

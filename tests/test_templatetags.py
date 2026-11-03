@@ -32,6 +32,7 @@ def test_chat_ui_writes_what_a_page_needs():
     assert data["poll"] == 0
     assert len(data["csrfToken"]) == 64
     assert data["texts"]["thread"]["send"] == "Send"
+    assert data["linkify"] is True
     # Nothing inline runs (strict CSP): only a data block, and a module.
     assert "<script>" not in html
     assert "style=" not in html
@@ -49,3 +50,8 @@ def test_chat_ui_texts_are_translated():
     assert data["texts"]["thread"]["send"] == "Enviar"
     assert data["texts"]["inbox"]["unread"] == "%(count)s sin leer"
     assert data["texts"]["widget"]["open"] == "Escríbenos"
+
+
+def test_chat_ui_linkify_setting(settings):
+    settings.CHAT_UI = {"LINKIFY": {"phone": False}}
+    assert config(render("{% chat_ui %}"))["linkify"] == {"phone": False}

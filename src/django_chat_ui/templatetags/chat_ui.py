@@ -16,6 +16,7 @@ from django import template
 from django.middleware.csrf import get_token
 from django.urls import reverse
 
+from ..sync import setting
 from ..texts import texts
 
 register = template.Library()
@@ -33,6 +34,9 @@ def chat_ui(context: template.Context, poll: int = 0) -> dict[str, Any]:
             "baseUrl": base,
             "csrfToken": get_token(request) if request is not None else "",
             "poll": int(poll),
+            # URLs, emails and phones in a text: links (True), none
+            # (False), or by kind ({"phone": False}).
+            "linkify": setting("LINKIFY", True),
             "texts": texts(),
         },
     }

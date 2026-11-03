@@ -53,7 +53,7 @@ export function safeUrl(url) {
     return null;
 }
 
-function link(url, text) {
+export function link(url, text) {
     const label = text ?? url ?? "";
     const href = safeUrl(url);
     if (!href) return document.createTextNode(label);
@@ -199,13 +199,163 @@ export function renderMarkdown(text) {
     return root;
 }
 
+// Links in plain text: URLs, emails and phone numbers become links, each
+// by a linkifier: a global `pattern`, and `link(match)`, its Node (null:
+// it stays text). Earliest match first; at the same place, the first
+// registered (URLs, emails, phones). Each can be turned off, and others
+// added:
+//
+//   import { registerLinkifier, setLinkify } from "./content.js";
+//   setLinkify({ phone: false });
+//   registerLinkifier("order", {
+//       pattern: /#(\d{4,})/g,
+//       link: (match) => link(`/orders/${match[1]}/`, match[0]),
+//   });
+
+const linkifiers = new Map();
+let linkifyOn = true;
+const linkifyOff = new Set();
+
+export function registerLinkifier(name, linkifier) {
+    linkifiers.set(name, linkifier);
+}
+
+export function unregisterLinkifier(name) {
+    linkifiers.delete(name);
+}
+
+/** Which linkifiers are on: `true` all (the default), `false` none, or
+ * `{ phone: false, … }` (those not named stay as they are). */
+export function setLinkify(options) {
+    if (typeof options === "boolean") {
+        linkifyOn = options;
+        linkifyOff.clear();
+        return;
+    }
+    for (const [name, on] of Object.entries(options ?? {})) {
+        if (on) linkifyOff.delete(name);
+        else linkifyOff.add(name);
+    }
+}
+
+/** A URL without what follows it in a sentence: . , ; : ! ? and a ")" it
+ * didn't open. */
+function trimUrl(url) {
+    let end = url;
+    for (;;) {
+        if (/[.,;:!?]$/.test(end)) {
+            end = end.slice(0, -1);
+        } else if (
+            end.endsWith(")") &&
+            end.split(")").length > end.split("(").length
+        ) {
+            end = end.slice(0, -1);
+        } else {
+            return end;
+        }
+    }
+}
+
+registerLinkifier("url", {
+    pattern: /\b(?:https?:\/\/|www\.)[^\s<>"]+/gi,
+    link(match) {
+        const url = trimUrl(match[0]);
+        const href = /^www\./i.test(url) ? `https://${url}` : url;
+        return { length: url.length, node: link(href, url) };
+    },
+});
+
+function anchor(href, text) {
+    const node = element("a", null, text);
+    node.href = href;
+    return node;
+}
+
+registerLinkifier("email", {
+    pattern: /(?<![\w.%+-])[\w.%+-]+@[a-z\d-]+(?:\.[a-z\d-]+)*\.[a-z]{2,}\b/gi,
+    link: (match) => anchor(`mailto:${match[0]}`, match[0]),
+});
+
+// A phone number only when it clearly is one: with its +prefix, or of 9
+// digits or more (spaces, hyphens and dots between them), not part of a
+// word, another number or an amount (1.234.567,89): not codes, dates or
+// prices.
+registerLinkifier("phone", {
+    pattern: /(?<![\w+.,-])\+?\d+(?:[ .-]\d+)*(?![\w]|[.,-]\d)/g,
+    link(match) {
+        const digits = match[0].replace(/[^\d]/g, "");
+        const prefixed = match[0].startsWith("+");
+        if (digits.length > 15 || digits.length < (prefixed ? 7 : 9)) {
+            return null;
+        }
+        return anchor(`tel:${prefixed ? "+" : ""}${digits}`, match[0]);
+    },
+});
+
+/** The first link in `text` from `from` on: `{ index, length, node }`. */
+function nextLink(text, from) {
+    if (!linkifyOn) return null;
+    let best = null;
+    for (const [name, linkifier] of linkifiers) {
+        if (linkifyOff.has(name)) continue;
+        const pattern = new RegExp(
+            linkifier.pattern.source,
+            linkifier.pattern.flags.includes("g")
+                ? linkifier.pattern.flags
+                : `${linkifier.pattern.flags}g`,
+        );
+        pattern.lastIndex = from;
+        for (
+            let match = pattern.exec(text);
+            match;
+            match = pattern.exec(text)
+        ) {
+            if (best && match.index >= best.index) break;
+            if (!match[0]) {
+                pattern.lastIndex += 1;
+                continue;
+            }
+            let found;
+            try {
+                found = linkifier.link(match);
+            } catch {
+                found = null; // A broken linkifier: its text.
+            }
+            if (!found) continue;
+            const { node, length } =
+                found instanceof Node
+                    ? { node: found, length: match[0].length }
+                    : found;
+            best = { index: match.index, length, node };
+            break;
+        }
+    }
+    return best;
+}
+
+function linkify(text, parent) {
+    let from = 0;
+    for (let found = nextLink(text, 0); found; found = nextLink(text, from)) {
+        if (found.index > from) {
+            parent.append(
+                document.createTextNode(text.slice(from, found.index)),
+            );
+        }
+        parent.append(found.node);
+        from = found.index + found.length;
+    }
+    if (from < text.length) {
+        parent.append(document.createTextNode(text.slice(from)));
+    }
+}
+
 function plain(text) {
     const node = element("div", "chat-text");
     String(text ?? "")
         .split("\n")
         .forEach((line, index) => {
             if (index) node.append(element("br"));
-            node.append(document.createTextNode(line));
+            linkify(line, node);
         });
     return node;
 }
