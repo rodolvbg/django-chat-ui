@@ -109,31 +109,37 @@ const DROPPED = new Set([
     "title",
 ]);
 
-function rebuild(source, parent) {
+// Where a text's URLs, emails and phones stay as they are: a link's own
+// text, and code.
+const UNLINKED = new Set(["a", "code", "pre"]);
+
+function rebuild(source, parent, linkable = true) {
     for (const node of source.childNodes) {
         if (node.nodeType === Node.TEXT_NODE) {
-            parent.append(document.createTextNode(node.textContent));
+            if (linkable) linkify(node.textContent, parent);
+            else parent.append(document.createTextNode(node.textContent));
             continue;
         }
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
         const tag = node.tagName.toLowerCase();
         if (DROPPED.has(tag)) continue;
         if (!TAGS.has(tag)) {
-            rebuild(node, parent); // Its text, without it.
+            rebuild(node, parent, linkable); // Its text, without it.
             continue;
         }
         if (tag === "a" && safeUrl(node.getAttribute("href"))) {
             const anchor = link(node.getAttribute("href"), "");
-            rebuild(node, anchor);
+            rebuild(node, anchor, false);
             parent.append(anchor);
             continue;
         }
         if (tag === "a") {
-            rebuild(node, parent); // Not to be followed: its text.
+            // Not to be followed: its text, as text.
+            rebuild(node, parent, false);
             continue;
         }
         const copy = element(tag);
-        rebuild(node, copy);
+        rebuild(node, copy, linkable && !UNLINKED.has(tag));
         parent.append(copy);
     }
 }

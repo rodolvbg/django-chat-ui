@@ -507,6 +507,34 @@ describe("links in a text", () => {
         expect(links(card)).toEqual([["x@y.io", "mailto:x@y.io"]]);
     });
 
+    it("in an HTML message too, not in its links or code", () => {
+        const node = render({
+            msgtype: "m.text",
+            body: "Mira https://ejemplo.com",
+            format: HTML,
+            formatted_body:
+                "<strong>Mira</strong> https://ejemplo.com, <em>a@b.co</em>" +
+                ' <a href="https://x.com">https://y.com</a>' +
+                ' <a href="javascript:alert(1)">c@d.co</a>' +
+                " <code>https://z.com</code><pre>+34 600 123 456</pre>" +
+                "<span>+34 600 123 456</span>",
+        });
+        expect(links(node)).toEqual([
+            ["https://ejemplo.com", "https://ejemplo.com/"],
+            ["a@b.co", "mailto:a@b.co"],
+            ["https://y.com", "https://x.com/"],
+            ["+34 600 123 456", "tel:+34600123456"],
+        ]);
+        expect(node.querySelector("strong").textContent).toBe("Mira");
+        expect(node.querySelector("em a").textContent).toBe("a@b.co");
+        expect(node.querySelector("code").textContent).toBe("https://z.com");
+        expect(node.querySelector("pre").textContent).toBe("+34 600 123 456");
+        setLinkify(false);
+        expect(links(renderHtml("<p>Mira https://ejemplo.com</p>"))).toEqual(
+            [],
+        );
+    });
+
     it("can be turned off, all or by kind", () => {
         const body = "x@y.io +34 600 123 456 https://c.com";
         setLinkify(false);

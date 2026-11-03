@@ -340,8 +340,8 @@ registerMsgtype("com.acme.order", (content, context) => {
 
 ### Links in a text
 
-In a plain text (one from WhatsApp, say), URLs, emails and phone numbers
-are links: `https://…` and `www.…` (as `https://`) open in another tab
+In a text (one from WhatsApp, say), plain or HTML, URLs, emails and phone
+numbers are links (in HTML, not in its links' text nor in code): `https://…` and `www.…` (as `https://`) open in another tab
 (only those `safeUrl()` lets through: `https`, or the site's own; an
 `http://` one stays text), an email opens `mailto:`, and a phone `tel:` —
 only what clearly is one: with its `+` prefix, or of 9 digits or more
