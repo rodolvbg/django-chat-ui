@@ -22,6 +22,7 @@ import {
 afterEach(() => {
     stopAll();
     document.body.replaceChildren();
+    window.history.replaceState(null, "", "/");
 });
 
 const LUCY = { id: "@lucy:demo", kind: "user", name: "Lucy", handle: "lucy" };
@@ -272,5 +273,91 @@ describe("<chat-inbox>", () => {
             alone.querySelector(".chat-conversation-title").textContent,
         ).toBe("");
         expect(alone.querySelector(".chat-avatar").textContent).toBe("");
+    });
+});
+
+describe("<chat-inbox> in the URL", () => {
+    const pick = (element, id) =>
+        element.querySelector(`[data-conversation="${id}"]`).click();
+    const param = () =>
+        new URLSearchParams(window.location.search).get("conversation");
+
+    it("writes the conversation open, and opens the URL's", async () => {
+        window.history.replaceState(null, "", "/inbox/?tab=1");
+        const { inbox: element } = await inbox();
+        expect(element.selected).toBe(null);
+        pick(element, "!wa:demo");
+        expect(param()).toBe("!wa:demo");
+        expect(window.location.search).toBe("?tab=1&conversation=%21wa%3Ademo");
+        const length = window.history.length;
+        pick(element, "!wa:demo"); // The same: no new entry.
+        expect(window.history.length).toBe(length);
+        element.querySelector(".chat-inbox-back").click();
+        expect(window.location.search).toBe("?tab=1");
+
+        // A reload, or a link: opened.
+        window.history.replaceState(
+            null,
+            "",
+            "/inbox/?conversation=!team:demo",
+        );
+        const { inbox: again } = await inbox();
+        expect(again.selected).toBe("!team:demo");
+        expect(again.querySelector(".chat-inbox-title").textContent).toBe(
+            "Team",
+        );
+    });
+
+    it("follows back and forward", async () => {
+        const { inbox: element } = await inbox();
+        const selects = [];
+        element.addEventListener("select", (event) =>
+            selects.push(event.detail.conversation),
+        );
+        window.history.pushState(null, "", "/?conversation=!team:demo");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        expect(element.selected).toBe("!team:demo");
+        window.dispatchEvent(new PopStateEvent("popstate")); // Still it.
+        window.history.pushState(null, "", "/");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        expect(element.selected).toBe(null);
+        expect(selects).toEqual(["!team:demo", null]);
+        // Let go: no longer.
+        element.remove();
+        window.history.pushState(null, "", "/?conversation=!team:demo");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        expect(element.selected).toBe(null);
+    });
+
+    it("its own parameter's name, or not in the URL", async () => {
+        const { client } = await setup({
+            rooms: ROOMS,
+            users: [ANA, BOT, LUCY],
+        });
+        const named = document.createElement("chat-inbox");
+        named.setAttribute("url-param", "chat");
+        named.client = client;
+        named.selected = "!bot:demo"; // Before: the URL names none.
+        document.body.append(named);
+        await flush();
+        expect(named.selected).toBe("!bot:demo");
+        expect(named.thread.getAttribute("conversation")).toBe("!bot:demo");
+        pick(named, "!wa:demo");
+        expect(window.location.search).toBe("?chat=%21wa%3Ademo");
+
+        window.history.replaceState(null, "", "/?conversation=!team:demo");
+        for (const off of ["off", "false"]) {
+            const element = document.createElement("chat-inbox");
+            element.setAttribute("url-state", off);
+            element.client = client;
+            document.body.append(element);
+            await flush();
+            expect(element.selected).toBe(null);
+            pick(element, "!bot:demo");
+            expect(window.location.search).toBe("?conversation=!team:demo");
+            window.dispatchEvent(new PopStateEvent("popstate"));
+            expect(element.selected).toBe("!bot:demo");
+            element.remove();
+        }
     });
 });

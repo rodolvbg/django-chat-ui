@@ -9,6 +9,10 @@
  *
  * Properties: client, texts (merged over INBOX_TEXTS), selected (the
  * conversation id shown). Dispatches "select" (detail: { conversation }).
+ *
+ * The conversation open is in the page's URL (?conversation=<id>): a
+ * reload, the back button or a link lead to it. Attributes: url-param (its
+ * name, "conversation"), url-state="off" (not in the URL).
  */
 
 import "./chat-thread.js";
@@ -51,6 +55,43 @@ export class ChatInbox extends HTMLElement {
         this._selected = null;
         this.query = "";
         this.onChange = () => this.render();
+        this.onPopState = () => this.fromUrl(true);
+    }
+
+    /** The URL's parameter with the conversation open; null: none. */
+    get urlParam() {
+        const state = this.getAttribute("url-state");
+        if (state === "off" || state === "false") return null;
+        return this.getAttribute("url-param") || "conversation";
+    }
+
+    /** The conversation the URL names (on load, back and forward). */
+    fromUrl(announce) {
+        const param = this.urlParam;
+        if (!param) return;
+        const id = new URLSearchParams(window.location.search).get(param);
+        if (!announce) {
+            // On load: the URL's, or the one set before (none named).
+            if (id) this._selected = id;
+            return;
+        }
+        if (id === this._selected) return;
+        this.selected = id;
+        this.dispatchEvent(
+            new CustomEvent("select", { detail: { conversation: id } }),
+        );
+    }
+
+    /** Write the conversation open in the URL: a new history entry. */
+    toUrl(id) {
+        const param = this.urlParam;
+        if (!param) return;
+        const url = new URL(window.location.href);
+        if (id) url.searchParams.set(param, id);
+        else url.searchParams.delete(param);
+        if (url.href !== window.location.href) {
+            window.history.pushState(window.history.state, "", url);
+        }
     }
 
     get client() {
@@ -91,12 +132,16 @@ export class ChatInbox extends HTMLElement {
 
     connectedCallback() {
         followPageTheme(this);
+        this.fromUrl(false);
+        window.addEventListener("popstate", this.onPopState);
         if (!this.shell) this.build();
+        else this.selected = this._selected;
         this.render();
     }
 
     disconnectedCallback() {
         unfollowPageTheme(this);
+        window.removeEventListener("popstate", this.onPopState);
         this.unlisten();
     }
 
@@ -140,6 +185,7 @@ export class ChatInbox extends HTMLElement {
 
     select(id) {
         this.selected = id;
+        this.toUrl(id);
         this.dispatchEvent(
             new CustomEvent("select", { detail: { conversation: id } }),
         );

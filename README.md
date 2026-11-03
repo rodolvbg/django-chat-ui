@@ -26,7 +26,10 @@ a Django app that is a Matrix homeserver for it.
   Policy.
 - `<chat-inbox>`: the inbox of whoever answers — every conversation, the
   latest active first, with unread counts and a search, and the one
-  selected; on a narrow screen, the list or the conversation.
+  selected; on a narrow screen, the list or the conversation. The one open
+  is in the page's URL (`?conversation=<id>`): a reload, the back button or
+  a link lead to it (`url-param="…"` names it, `url-state="off"` keeps it
+  out).
 - `<chat-widget>`: a site's floating "contact us" chat, which starts a
   conversation when opened (and can remember it, with `storage-key`).
 - A Django app: the conversations in the database as Matrix rooms, `/sync`

@@ -219,6 +219,8 @@ chat-thread[hidden] {
 
 .chat-bubble a {
     color: var(--chat-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
 .chat-image,
@@ -288,6 +290,7 @@ chat-thread[hidden] {
 
 .chat-bubble a.chat-button--link {
     color: var(--chat-accent);
+    text-decoration: none;
 }
 
 .chat-bubble a.chat-button--primary {

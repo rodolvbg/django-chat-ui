@@ -261,3 +261,38 @@ def test_replying_to_a_message(agent_page: Page, visitor_page: Page):
         "Do you have the blue one in M?"
     )
     expect(answer.locator(".chat-quote-author")).to_have_text("You")
+
+
+def test_the_conversation_open_is_in_the_url(agent_page: Page, visitor_page: Page):
+    agent, visitor = agent_page, visitor_page
+    visitor.locator(".chat-widget-launcher").click()
+    widget = visitor.locator("chat-widget chat-thread")
+    widget.locator(".chat-input").fill(
+        "Is the shop open on Sunday? https://example.com"
+    )
+    widget.locator(".chat-input").press("Enter")
+
+    agent.locator(".chat-conversation").first.click()
+    thread = agent.locator("chat-inbox chat-thread")
+    expect(thread.locator(".chat-message")).to_contain_text(
+        ["Is the shop open on Sunday?"]
+    )
+    expect(agent).to_have_url(re.compile(r"/inbox/\?conversation=%21"))
+    # Its link, underlined as a chat's are.
+    link = thread.locator(".chat-bubble a", has_text="https://example.com")
+    assert link.evaluate("a => getComputedStyle(a).textDecorationLine") == "underline"
+
+    # A reload: still open.
+    agent.reload()
+    expect(thread.locator(".chat-message")).to_contain_text(
+        ["Is the shop open on Sunday?"]
+    )
+    # Back: none open; forward: it again.
+    agent.go_back()
+    expect(agent).to_have_url(re.compile(r"/inbox/$"))
+    expect(thread).to_be_hidden()
+    agent.go_forward()
+    expect(agent).to_have_url(re.compile(r"conversation="))
+    expect(thread.locator(".chat-message")).to_contain_text(
+        ["Is the shop open on Sunday?"]
+    )
