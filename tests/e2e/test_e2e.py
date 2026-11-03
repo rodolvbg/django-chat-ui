@@ -277,7 +277,8 @@ def test_the_conversation_open_is_in_the_url(agent_page: Page, visitor_page: Pag
     expect(thread.locator(".chat-message")).to_contain_text(
         ["Is the shop open on Sunday?"]
     )
-    expect(agent).to_have_url(re.compile(r"/inbox/\?conversation=%21"))
+    # Its room ID, without the "!" and the server: "?conversation=1".
+    expect(agent).to_have_url(re.compile(r"/inbox/\?conversation=\d+$"))
     # Its link, underlined as a chat's are.
     link = thread.locator(".chat-bubble a", has_text="https://example.com")
     assert link.evaluate("a => getComputedStyle(a).textDecorationLine") == "underline"
@@ -292,7 +293,7 @@ def test_the_conversation_open_is_in_the_url(agent_page: Page, visitor_page: Pag
     expect(agent).to_have_url(re.compile(r"/inbox/$"))
     expect(thread).to_be_hidden()
     agent.go_forward()
-    expect(agent).to_have_url(re.compile(r"conversation="))
+    expect(agent).to_have_url(re.compile(r"conversation=\d+$"))
     expect(thread.locator(".chat-message")).to_contain_text(
         ["Is the shop open on Sunday?"]
     )

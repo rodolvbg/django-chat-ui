@@ -10,9 +10,14 @@
  * Properties: client, texts (merged over INBOX_TEXTS), selected (the
  * conversation id shown). Dispatches "select" (detail: { conversation }).
  *
- * The conversation open is in the page's URL (?conversation=<id>): a
+ * The conversation open is in the page's URL (?conversation=<key>): a
  * reload, the back button or a link lead to it. Attributes: url-param (its
- * name, "conversation"), url-state="off" (not in the URL).
+ * name, "conversation"), url-state="off" (not in the URL), url-key (what
+ * names it: "local", its room ID without the "!" and one's own server;
+ * "id", the room ID; "handle", the contact's, a phone say; "ext.<field>",
+ * one of the conversation's ext). Or, in JS, inbox.urlKey = (conversation,
+ * me) => key; and inbox.resolveUrlKey = async (key) => room ID, for a key
+ * none of the conversations has. A key no conversation has: the room ID.
  */
 
 import "./chat-thread.js";
@@ -38,6 +43,27 @@ export const INBOX_TEXTS = {
     you: "You",
 };
 
+/** Whoever is outside of a conversation: its contact (not a bot), else
+ * someone with a handle. */
+function contact(conversation, me) {
+    const others = conversation.participants.filter(
+        (p) => p.id !== me && p.handle && p.kind !== "bot",
+    );
+    return others.find((p) => p.kind === "contact") ?? others[0];
+}
+
+/** What names a conversation in the URL, by url-key. */
+export const URL_KEYS = {
+    id: (conversation) => conversation.id,
+    // "!1:example.com" → "1", on one's own server (another's: as it is).
+    local: (conversation, me) => {
+        const match = /^!([^:]+):(.+)$/.exec(conversation.id);
+        const server = me?.slice(me.indexOf(":") + 1);
+        return match && match[2] === server ? match[1] : conversation.id;
+    },
+    handle: (conversation, me) => contact(conversation, me)?.handle,
+};
+
 function initials(name) {
     return name
         .split(/\s+/)
@@ -54,7 +80,15 @@ export class ChatInbox extends HTMLElement {
         this._texts = INBOX_TEXTS;
         this._selected = null;
         this.query = "";
-        this.onChange = () => this.render();
+        /** (conversation, me) => its key in the URL; null: url-key's. */
+        this.urlKey = null;
+        /** async (key) => the room ID of a key no conversation has. */
+        this.resolveUrlKey = null;
+        this._pending = null; // The URL's key, until it's found.
+        this.onChange = () => {
+            this.resolveUrl();
+            this.render();
+        };
         this.onPopState = () => this.fromUrl(true);
     }
 
@@ -65,32 +99,99 @@ export class ChatInbox extends HTMLElement {
         return this.getAttribute("url-param") || "conversation";
     }
 
+    /** A conversation's key in the URL: urlKey's, or url-key's. */
+    keyOf(conversation) {
+        const me = this._client?.me;
+        const name = this.getAttribute("url-key") || "local";
+        let key;
+        if (this.urlKey) key = this.urlKey(conversation, me);
+        else if (name.startsWith("ext.")) {
+            key = name
+                .slice(4)
+                .split(".")
+                .reduce((value, field) => value?.[field], conversation.ext);
+        } else key = (URL_KEYS[name] ?? URL_KEYS.id)(conversation, me);
+        return key === undefined || key === null || key === ""
+            ? conversation.id
+            : String(key);
+    }
+
+    /** The conversation a key names: the latest one with it, or the room
+     * of that ID; null: none (yet). */
+    find(key) {
+        const client = this._client;
+        if (!client) return null;
+        const store = client
+            .list()
+            .find((store) => this.keyOf(store.conversation) === key);
+        if (store) return store.id;
+        return client.rooms.get(key)?.joined ? key : null;
+    }
+
     /** The conversation the URL names (on load, back and forward). */
     fromUrl(announce) {
         const param = this.urlParam;
         if (!param) return;
-        const id = new URLSearchParams(window.location.search).get(param);
-        if (!announce) {
-            // On load: the URL's, or the one set before (none named).
-            if (id) this._selected = id;
+        const key = new URLSearchParams(window.location.search).get(param);
+        if (!key) {
+            // On load: the one set before (none named); back: none.
+            this._pending = null;
+            if (announce) this.show(null, true);
             return;
         }
-        if (id === this._selected) return;
-        this.selected = id;
-        this.dispatchEvent(
-            new CustomEvent("select", { detail: { conversation: id } }),
-        );
+        this._pending = { key, announce };
+        this.resolveUrl();
     }
 
-    /** Write the conversation open in the URL: a new history entry. */
-    toUrl(id) {
+    /** Open the URL's conversation, once it's found (its conversations may
+     * be still on their way); none has it: resolveUrlKey's, if any. */
+    resolveUrl() {
+        const pending = this._pending;
+        if (!pending) return;
+        const id = this.find(pending.key);
+        if (id) {
+            this._pending = null;
+            this.toUrl(id, true); // Its key now (an old link: a room ID).
+            this.show(id, pending.announce);
+        } else if (this.resolveUrlKey && !pending.asked && this._client) {
+            pending.asked = true;
+            this.ask(pending);
+        }
+    }
+
+    async ask(pending) {
+        await this._client.ready; // All its conversations, first.
+        if (this._pending !== pending || this.find(pending.key)) {
+            return this.resolveUrl();
+        }
+        const id = await this.resolveUrlKey(pending.key);
+        if (this._pending !== pending || !id) return;
+        this._pending = null;
+        this.show(id, pending.announce);
+    }
+
+    show(id, announce) {
+        if (id === this._selected) return;
+        this.selected = id;
+        if (announce) {
+            this.dispatchEvent(
+                new CustomEvent("select", { detail: { conversation: id } }),
+            );
+        }
+    }
+
+    /** Write the conversation open in the URL, by its key: a new history
+     * entry (replace: the same one). */
+    toUrl(id, replace = false) {
         const param = this.urlParam;
         if (!param) return;
         const url = new URL(window.location.href);
-        if (id) url.searchParams.set(param, id);
+        const store = id && this._client?.rooms.get(id);
+        if (id) url.searchParams.set(param, store ? this.keyOf(store.conversation) : id);
         else url.searchParams.delete(param);
         if (url.href !== window.location.href) {
-            window.history.pushState(window.history.state, "", url);
+            const write = replace ? "replaceState" : "pushState";
+            window.history[write](window.history.state, "", url);
         }
     }
 
@@ -104,7 +205,7 @@ export class ChatInbox extends HTMLElement {
         client.addEventListener("conversations", this.onChange);
         client.addEventListener("ready", this.onChange);
         if (this.thread) this.thread.client = client;
-        this.render();
+        this.onChange();
     }
 
     get texts() {
@@ -184,6 +285,7 @@ export class ChatInbox extends HTMLElement {
     }
 
     select(id) {
+        this._pending = null;
         this.selected = id;
         this.toUrl(id);
         this.dispatchEvent(
@@ -247,13 +349,9 @@ export class ChatInbox extends HTMLElement {
 
     subtitle(store) {
         const conversation = store.conversation;
-        const me = this._client?.me;
         // How the channel knows whoever is outside (not a bot's handle).
-        const others = conversation.participants.filter(
-            (p) => p.id !== me && p.handle && p.kind !== "bot",
-        );
-        const contact = others.find((p) => p.kind === "contact") ?? others[0];
-        return [conversation.channel, contact?.handle]
+        const outside = contact(conversation, this._client?.me);
+        return [conversation.channel, outside?.handle]
             .filter(Boolean)
             .join(" · ");
     }

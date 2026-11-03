@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `<chat-inbox url-key="…">`: what names the conversation open in the URL —
+  `local` (its room ID without the `!` and one's own server, `1`), `id`
+  (the room ID), `handle` (its contact's: a phone, say) or `ext.<field>`
+  (one of the conversation's `ext`). In JS, `inbox.urlKey = (conversation,
+  me) => key`, and `inbox.resolveUrlKey = async (key) => roomId` for a key
+  none of the conversations has. A key waits for its conversation to
+  arrive; a room ID always opens it (old links too).
+
+### Changed
+
+- The inbox's URL names a conversation by `local` by default
+  (`?conversation=1`, not `?conversation=%211%3Alocalhost`).
+
 ## [0.1.3] - 2026-11-03
 
 ### Added

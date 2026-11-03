@@ -287,8 +287,9 @@ describe("<chat-inbox> in the URL", () => {
         const { inbox: element } = await inbox();
         expect(element.selected).toBe(null);
         pick(element, "!wa:demo");
-        expect(param()).toBe("!wa:demo");
-        expect(window.location.search).toBe("?tab=1&conversation=%21wa%3Ademo");
+        // Its room ID's, without the "!" and our own server.
+        expect(param()).toBe("wa");
+        expect(window.location.search).toBe("?tab=1&conversation=wa");
         const length = window.history.length;
         pick(element, "!wa:demo"); // The same: no new entry.
         expect(window.history.length).toBe(length);
@@ -296,16 +297,20 @@ describe("<chat-inbox> in the URL", () => {
         expect(window.location.search).toBe("?tab=1");
 
         // A reload, or a link: opened.
-        window.history.replaceState(
-            null,
-            "",
-            "/inbox/?conversation=!team:demo",
-        );
+        window.history.replaceState(null, "", "/inbox/?conversation=team");
         const { inbox: again } = await inbox();
         expect(again.selected).toBe("!team:demo");
         expect(again.querySelector(".chat-inbox-title").textContent).toBe(
             "Team",
         );
+        // An old link, by its room ID: opened, and its key in the URL.
+        document.body.replaceChildren();
+        window.history.replaceState(null, "", "/?conversation=!bot:demo");
+        const length2 = window.history.length;
+        const { inbox: old } = await inbox();
+        expect(old.selected).toBe("!bot:demo");
+        expect(param()).toBe("bot");
+        expect(window.history.length).toBe(length2);
     });
 
     it("follows back and forward", async () => {
@@ -314,7 +319,7 @@ describe("<chat-inbox> in the URL", () => {
         element.addEventListener("select", (event) =>
             selects.push(event.detail.conversation),
         );
-        window.history.pushState(null, "", "/?conversation=!team:demo");
+        window.history.pushState(null, "", "/?conversation=team");
         window.dispatchEvent(new PopStateEvent("popstate"));
         expect(element.selected).toBe("!team:demo");
         window.dispatchEvent(new PopStateEvent("popstate")); // Still it.
@@ -343,7 +348,7 @@ describe("<chat-inbox> in the URL", () => {
         expect(named.selected).toBe("!bot:demo");
         expect(named.thread.getAttribute("conversation")).toBe("!bot:demo");
         pick(named, "!wa:demo");
-        expect(window.location.search).toBe("?chat=%21wa%3Ademo");
+        expect(window.location.search).toBe("?chat=wa");
 
         window.history.replaceState(null, "", "/?conversation=!team:demo");
         for (const off of ["off", "false"]) {
@@ -359,5 +364,202 @@ describe("<chat-inbox> in the URL", () => {
             expect(element.selected).toBe("!bot:demo");
             element.remove();
         }
+    });
+
+    async function keyed(attrs = {}, rooms = ROOMS, before) {
+        const { client, server } = await setup({
+            rooms,
+            users: [ANA, BOT, LUCY],
+        });
+        const element = document.createElement("chat-inbox");
+        for (const [name, value] of Object.entries(attrs)) {
+            element.setAttribute(name, value);
+        }
+        before?.(element);
+        document.body.append(element);
+        element.client = client;
+        await flush();
+        return { element, client, server };
+    }
+
+    it("named by its room ID, its contact's handle or its ext", async () => {
+        let { element } = await keyed({ "url-key": "id" });
+        pick(element, "!wa:demo");
+        expect(window.location.search).toBe("?conversation=%21wa%3Ademo");
+        element.remove();
+
+        ({ element } = await keyed({ "url-key": "handle" }));
+        pick(element, "!wa:demo"); // Ana's, not the bot's.
+        expect(param()).toBe("+34 600 000 000");
+        pick(element, "!team:demo");
+        expect(param()).toBe("lucy");
+        pick(element, "!bot:demo"); // None: its room ID.
+        expect(param()).toBe("!bot:demo");
+        element.remove();
+        window.history.replaceState(
+            null,
+            "",
+            `/?conversation=${encodeURIComponent("+34 600 000 000")}`,
+        );
+        ({ element } = await keyed({ "url-key": "handle" }));
+        expect(element.selected).toBe("!wa:demo");
+        element.remove();
+
+        const rooms = [
+            [
+                {
+                    id: "!p:demo",
+                    members: [ME.id],
+                    ext: { patient: { id: 7 } },
+                },
+                [],
+            ],
+            [{ id: "!q:demo", members: [ME.id], ext: { patient: {} } }, []],
+            [{ id: "!r:demo", members: [ME.id] }, []],
+        ];
+        ({ element } = await keyed({ "url-key": "ext.patient.id" }, rooms));
+        pick(element, "!p:demo");
+        expect(param()).toBe("7");
+        pick(element, "!q:demo");
+        expect(param()).toBe("!q:demo");
+        pick(element, "!r:demo");
+        expect(param()).toBe("!r:demo");
+        element.remove();
+        window.history.replaceState(null, "", "/?conversation=7");
+        ({ element } = await keyed({ "url-key": "ext.patient.id" }, rooms));
+        expect(element.selected).toBe("!p:demo");
+    });
+
+    it("another server's room, or an unknown url-key: its room ID", async () => {
+        const rooms = [[{ id: "!x:other", members: [ME.id] }, []]];
+        let { element } = await keyed({}, rooms);
+        pick(element, "!x:other");
+        expect(param()).toBe("!x:other");
+        element.remove();
+        ({ element } = await keyed({ "url-key": "nope" }));
+        pick(element, "!wa:demo");
+        expect(param()).toBe("!wa:demo");
+        element.select("!unknown:demo"); // None it has: as it is.
+        expect(param()).toBe("!unknown:demo");
+        element.remove();
+        const lone = document.createElement("chat-inbox"); // No client yet.
+        document.body.append(lone);
+        lone.select("!wa:demo");
+        expect(param()).toBe("!wa:demo");
+    });
+
+    it("its own urlKey, the latest of those with the key", async () => {
+        const rooms = [
+            ...ROOMS,
+            [
+                {
+                    id: "!sms:demo",
+                    channel: "sms",
+                    members: [ME.id, ANA.id],
+                },
+                [{ sender: ANA.id, content: says("Again"), ts: 5000 }],
+            ],
+        ];
+        const urlKey = vi.fn((conversation, me) => {
+            expect(me).toBe(ME.id);
+            return conversation.channel === "bot"
+                ? null
+                : conversation.participants.find((p) => p.id === ANA.id)
+                      ?.handle;
+        });
+        let { element } = await keyed({ "url-key": "id" }, rooms, (e) => {
+            e.urlKey = urlKey;
+        });
+        pick(element, "!wa:demo");
+        expect(param()).toBe("+34 600 000 000");
+        pick(element, "!bot:demo");
+        expect(param()).toBe("!bot:demo");
+        element.remove();
+        // Two with Ana: the latest active.
+        window.history.replaceState(
+            null,
+            "",
+            `/?conversation=${encodeURIComponent("+34 600 000 000")}`,
+        );
+        ({ element } = await keyed({}, rooms, (e) => {
+            e.urlKey = urlKey;
+        }));
+        expect(element.selected).toBe("!sms:demo");
+    });
+
+    it("waits for the conversation it names", async () => {
+        window.history.replaceState(null, "", "/?conversation=late");
+        const { element, server } = await keyed();
+        expect(element.selected).toBe(null);
+        const selects = [];
+        element.addEventListener("select", (event) =>
+            selects.push(event.detail.conversation),
+        );
+        // Back to a key none has yet: once it's there, announced.
+        window.history.pushState(null, "", "/?conversation=later");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        expect(element.selected).toBe(null);
+        server.addRoom({ id: "!later:demo", members: [ME.id] });
+        await flush(60);
+        expect(element.selected).toBe("!later:demo");
+        expect(selects).toEqual(["!later:demo"]);
+        // Picked meanwhile: the pick.
+        window.history.pushState(null, "", "/?conversation=never");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        pick(element, "!wa:demo");
+        expect(element.selected).toBe("!wa:demo");
+        expect(param()).toBe("wa");
+    });
+
+    it("a key none has: resolveUrlKey's room", async () => {
+        window.history.replaceState(null, "", "/?conversation=12345");
+        const resolveUrlKey = vi.fn(async (key) =>
+            key === "12345" ? "!team:demo" : null,
+        );
+        let { element } = await keyed({}, ROOMS, (e) => {
+            e.resolveUrlKey = resolveUrlKey;
+        });
+        expect(resolveUrlKey).toHaveBeenCalledExactlyOnceWith("12345");
+        expect(element.selected).toBe("!team:demo");
+        expect(param()).toBe("12345"); // As it was linked.
+
+        // Back to one it doesn't know: none, asked once.
+        const selects = [];
+        element.addEventListener("select", (event) =>
+            selects.push(event.detail.conversation),
+        );
+        window.history.pushState(null, "", "/?conversation=x");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        await flush();
+        expect(resolveUrlKey).toHaveBeenCalledTimes(2);
+        expect(element.selected).toBe("!team:demo");
+        // Back to one it knows, while asked: that one.
+        window.history.pushState(null, "", "/?conversation=12345");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        window.history.pushState(null, "", "/?conversation=wa");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        await flush();
+        expect(element.selected).toBe("!wa:demo");
+        expect(selects).toEqual(["!wa:demo"]);
+        element.remove();
+
+        // Its conversations there before it's asked: one of them.
+        let release;
+        const { client } = await setup({ rooms: ROOMS, users: [ANA, BOT, LUCY] });
+        const slow = document.createElement("chat-inbox");
+        slow.resolveUrlKey = resolveUrlKey;
+        client.ready = new Promise((resolve) => {
+            release = resolve;
+        });
+        window.history.replaceState(null, "", "/?conversation=nobody");
+        document.body.append(slow);
+        slow.client = client;
+        window.history.replaceState(null, "", "/?conversation=bot");
+        slow.fromUrl(true);
+        release();
+        await flush();
+        expect(slow.selected).toBe("!bot:demo");
+        expect(resolveUrlKey).toHaveBeenCalledTimes(2);
     });
 });

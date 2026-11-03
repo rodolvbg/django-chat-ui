@@ -113,6 +113,7 @@ export class FakeHomeserver {
             state = "open",
             capabilities = {},
             unread = 0,
+            ext,
         },
         messages = [],
     ) {
@@ -150,7 +151,7 @@ export class FakeHomeserver {
             id,
             this.me.id,
             CONVERSATION,
-            { channel, state },
+            ext ? { channel, state, ext } : { channel, state },
             {
                 state_key: "",
             },

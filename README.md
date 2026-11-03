@@ -27,9 +27,8 @@ a Django app that is a Matrix homeserver for it.
 - `<chat-inbox>`: the inbox of whoever answers — every conversation, the
   latest active first, with unread counts and a search, and the one
   selected; on a narrow screen, the list or the conversation. The one open
-  is in the page's URL (`?conversation=<id>`): a reload, the back button or
-  a link lead to it (`url-param="…"` names it, `url-state="off"` keeps it
-  out).
+  is in the page's URL (`?conversation=1`): a reload, the back button or a
+  link lead to it ([The inbox's URL](#the-inboxs-url)).
 - `<chat-widget>`: a site's floating "contact us" chat, which starts a
   conversation when opened (and can remember it, with `storage-key`).
 - A Django app: the conversations in the database as Matrix rooms, `/sync`
@@ -365,6 +364,40 @@ registerLinkifier("order", {
     link: (match) => link(`/orders/${match[1]}/`, match[0]),
 });
 ```
+
+### The inbox's URL
+
+`<chat-inbox>` keeps the conversation open in the page's URL, so a reload,
+the back and forward buttons, or a link lead to it. What names it,
+`url-key`:
+
+| `url-key` | `?conversation=` |
+| --- | --- |
+| `local` (default) | its room ID without the `!` and one's own server: `1` (another server's: the whole ID) |
+| `id` | the room ID: `!1:example.com` |
+| `handle` | its contact's handle: a phone, an email, a username |
+| `ext.<field>` | one of the conversation's `ext` (yours, from the backend): `ext.patient.id` |
+
+A conversation without one (no handle, say) goes by its room ID; a room ID
+always opens its conversation (an old link, too). Two with the same key
+(one phone on two channels): the latest active. `url-param="…"` names the
+parameter; `url-state="off"` keeps it out of the URL.
+
+Or a key of a site's own, and the conversation of a key none has (a link
+from elsewhere, before it's synced, say):
+
+```js
+const inbox = document.querySelector("chat-inbox");
+inbox.urlKey = (conversation, me) => conversation.ext?.ticket;  // null: its room ID
+inbox.resolveUrlKey = async (key) => {                          // its room ID, or null
+    const response = await fetch(`/tickets/${encodeURIComponent(key)}/room/`);
+    return response.ok ? (await response.json()).room : null;
+};
+```
+
+A handle in the URL — a phone, an email — is personal data: it stays in the
+browser's history, the server's logs and analytics. Hence `local`, by
+default.
 
 ### Settings
 
