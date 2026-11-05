@@ -187,7 +187,11 @@ export class ChatInbox extends HTMLElement {
         if (!param) return;
         const url = new URL(window.location.href);
         const store = id && this._client?.rooms.get(id);
-        if (id) url.searchParams.set(param, store ? this.keyOf(store.conversation) : id);
+        if (id)
+            url.searchParams.set(
+                param,
+                store ? this.keyOf(store.conversation) : id,
+            );
         else url.searchParams.delete(param);
         if (url.href !== window.location.href) {
             const write = replace ? "replaceState" : "pushState";

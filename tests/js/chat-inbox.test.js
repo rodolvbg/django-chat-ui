@@ -516,7 +516,7 @@ describe("<chat-inbox> in the URL", () => {
         const resolveUrlKey = vi.fn(async (key) =>
             key === "12345" ? "!team:demo" : null,
         );
-        let { element } = await keyed({}, ROOMS, (e) => {
+        const { element } = await keyed({}, ROOMS, (e) => {
             e.resolveUrlKey = resolveUrlKey;
         });
         expect(resolveUrlKey).toHaveBeenCalledExactlyOnceWith("12345");
@@ -546,7 +546,10 @@ describe("<chat-inbox> in the URL", () => {
 
         // Its conversations there before it's asked: one of them.
         let release;
-        const { client } = await setup({ rooms: ROOMS, users: [ANA, BOT, LUCY] });
+        const { client } = await setup({
+            rooms: ROOMS,
+            users: [ANA, BOT, LUCY],
+        });
         const slow = document.createElement("chat-inbox");
         slow.resolveUrlKey = resolveUrlKey;
         client.ready = new Promise((resolve) => {
