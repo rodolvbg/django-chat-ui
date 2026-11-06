@@ -321,3 +321,26 @@ def test_stream_text_with_nothing(conversation, agent):
     assert done["done"] is True
     assert not conversation.messages.exists()
     assert not Typing.objects.exists()
+
+
+def test_who_sees_it_without_being_in_it(conversation, agent, customer, db):
+    # A team mate who sees everyone's conversations (their inbox), not in it.
+    from django.contrib.auth.models import User
+
+    from django_chat_ui.backend import get_backend
+    from django_chat_ui.models import ReadMarker, get_conversation_model
+
+    mate = get_backend().participant_for_user(User.objects.create_user("mate"))
+    first = services.send(conversation, customer, content.text("1"))
+    services.send(conversation, customer, content.text("2"))
+    services.send(conversation, mate, content.text("3"))
+    conversations = get_conversation_model().objects.filter(pk=conversation.pk)
+
+    # Unread, all of the others' while they haven't read it; a member's, theirs.
+    assert services.with_unread(conversations, mate).get().unread == 2
+    assert services.with_unread(conversations, agent).get().unread == 3
+    services.read(conversation, mate, first)
+    marker = ReadMarker.objects.get(participant=mate)
+    assert (marker.last_read, str(marker)) == (first, f"{mate} · {conversation}")
+    assert services.with_unread(conversations, mate).get().unread == 1
+    assert not Membership.objects.filter(participant=mate).exists()

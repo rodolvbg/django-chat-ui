@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Who sees a conversation without being in it (the backend's
+  `conversations()`: a team's inbox of everyone's) has its unread too: a
+  `ReadMarker` keeps how far they read (`services.read()`), and their
+  unread are the others' messages after it, all of them before they read
+  it. `/sync` gives them, and `services.with_unread(conversations,
+  participant)` annotates any conversations with them.
+
 ## [0.1.4] - 2026-11-03
 
 ### Added

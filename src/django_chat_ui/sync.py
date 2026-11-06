@@ -31,6 +31,7 @@ from .models import (
     SyncFilter,
     Typing,
 )
+from .services import with_unread
 
 if TYPE_CHECKING:
     from .backend import ChatBackend
@@ -188,16 +189,13 @@ class Sync:
 
     def everything(self) -> dict[str, Any]:
         response = empty(self.position)
-        conversations = self.backend.conversations(self.participant).distinct()
-        unread = dict(
-            Membership.objects.filter(participant=self.participant).values_list(
-                "conversation_id", "unread"
-            )
+        conversations = with_unread(
+            self.backend.conversations(self.participant).distinct(), self.participant
         )
         joined = response["rooms"]["join"]
         for conversation in conversations:
             joined[room_id(conversation)] = self.room(
-                conversation, unread.get(conversation.pk, 0), limited=self.since > 0
+                conversation, conversation.unread, limited=self.since > 0
             )
         response["account_data"]["events"] = _account_data(self.participant, None)
         return response
@@ -343,29 +341,25 @@ class Sync:
                     {"type": STREAM, "content": content}
                 )
 
-        unread = dict(
-            Membership.objects.filter(
-                participant=me, conversation__in=[*touched, *joined_now]
-            ).values_list("conversation_id", "unread")
-        )
         conversations = {
             c.pk: c
-            for c in self.backend.conversations(me).filter(
-                pk__in=[*touched, *joined_now]
+            for c in with_unread(
+                self.backend.conversations(me).filter(pk__in=[*touched, *joined_now]),
+                me,
             )
         }
         for pk, data in touched.items():
             if pk not in conversations:
                 continue
             data["unread_notifications"] = {
-                "notification_count": unread.get(pk, 0),
+                "notification_count": conversations[pk].unread,
                 "highlight_count": 0,
             }
             rooms["join"][room_id(pk)] = data
         for pk in joined_now:
             if pk in conversations:
                 rooms["join"][room_id(pk)] = self.room(
-                    conversations[pk], unread.get(pk, 0)
+                    conversations[pk], conversations[pk].unread
                 )
         for entry in entries:
             if entry.kind == "leave" and entry.event is not None:
