@@ -138,6 +138,8 @@ class AbstractConversation(models.Model):
     if TYPE_CHECKING:  # The relations of this package's models to it.
         memberships: RelatedManager[Membership]
         events: RelatedManager[RoomEvent]
+        #: Of ``services.with_unread()``.
+        unread: int
 
     class Meta:
         abstract = True
@@ -197,6 +199,39 @@ class Membership(models.Model):
             models.UniqueConstraint(
                 fields=["conversation", "participant"],
                 name="chat_ui_membership_unique",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.participant} · {self.conversation}"
+
+
+class ReadMarker(models.Model):
+    """How far a participant who sees a conversation without being in it
+    read it (the backend's ``conversations()``: a team's inbox of everyone's):
+    their unread are the others' messages after it (``services.with_unread``).
+    A member's is their membership's."""
+
+    conversation = models.ForeignKey(
+        conversation_model_name(), on_delete=models.CASCADE, related_name="+"
+    )
+    participant = models.ForeignKey(
+        participant_model_name(), on_delete=models.CASCADE, related_name="+"
+    )
+    last_read = models.ForeignKey(
+        "RoomEvent",
+        on_delete=models.CASCADE,
+        related_name="+",
+        verbose_name=_("read until"),
+    )
+
+    class Meta:
+        verbose_name = _("read marker")
+        verbose_name_plural = _("read markers")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["conversation", "participant"],
+                name="chat_ui_readmarker_unique",
             )
         ]
 

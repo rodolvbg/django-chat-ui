@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-chat-ui 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-24 16:46+0000\n"
+"POT-Creation-Date: 2026-11-06 12:18+0000\n"
 "PO-Revision-Date: 2026-10-20 14:10+0200\n"
 "Last-Translator: Rodolfo Becerra\n"
 "Language-Team: Spanish\n"
@@ -35,7 +35,7 @@ msgstr "tipo"
 msgid "user, agent, bot, contact, system, or an extension's."
 msgstr "user, agent, bot, contact, system, o el de una extensión."
 
-#: models.py:78 models.py:415
+#: models.py:78 models.py:450
 msgid "name"
 msgstr "nombre"
 
@@ -51,7 +51,7 @@ msgstr "identificador"
 msgid "How the channel knows them: a phone number, an email…"
 msgstr "Cómo lo conoce el canal: un teléfono, un email…"
 
-#: models.py:88 models.py:133 models.py:232 models.py:418
+#: models.py:88 models.py:133 models.py:267 models.py:453
 msgid "created"
 msgstr "creado"
 
@@ -87,87 +87,95 @@ msgstr "capacidades"
 msgid "updated"
 msgstr "actualizado"
 
-#: models.py:144
+#: models.py:146
 msgid "conversation"
 msgstr "conversación"
 
-#: models.py:145
+#: models.py:147
 msgid "conversations"
 msgstr "conversaciones"
 
-#: models.py:181
+#: models.py:183
 msgid "unread"
 msgstr "sin leer"
 
-#: models.py:188
+#: models.py:190 models.py:225
 msgid "read until"
 msgstr "leído hasta"
 
-#: models.py:190
+#: models.py:192
 msgid "joined"
 msgstr "se unió"
 
-#: models.py:193
+#: models.py:195
 msgid "membership"
 msgstr "participación"
 
-#: models.py:194
+#: models.py:196
 msgid "memberships"
 msgstr "participaciones"
 
-#: models.py:222
+#: models.py:229
+msgid "read marker"
+msgstr "marca de lectura"
+
+#: models.py:230
+msgid "read markers"
+msgstr "marcas de lectura"
+
+#: models.py:257
 msgid "sender"
 msgstr "remitente"
 
-#: models.py:224 models.py:416
+#: models.py:259 models.py:451
 msgid "type"
 msgstr "tipo"
 
-#: models.py:227
+#: models.py:262
 msgid "state key"
 msgstr "clave de estado"
 
-#: models.py:229
+#: models.py:264
 msgid "content"
 msgstr "contenido"
 
-#: models.py:233
+#: models.py:268
 msgid "transaction id"
 msgstr "id de transacción"
 
-#: models.py:250
+#: models.py:285
 msgid "event"
 msgstr "evento"
 
-#: models.py:251
+#: models.py:286
 msgid "events"
 msgstr "eventos"
 
-#: models.py:382
+#: models.py:417
 msgid "stream entry"
 msgstr "entrada del flujo"
 
-#: models.py:383
+#: models.py:418
 msgid "stream entries"
 msgstr "entradas del flujo"
 
-#: models.py:414
+#: models.py:449
 msgid "file"
 msgstr "archivo"
 
-#: models.py:417
+#: models.py:452
 msgid "size"
 msgstr "tamaño"
 
-#: models.py:421 models.py:422
+#: models.py:456 models.py:457
 msgid "media"
 msgstr "archivos"
 
-#: models.py:443
+#: models.py:478
 msgid "access token"
 msgstr "token de acceso"
 
-#: models.py:444
+#: models.py:479
 msgid "access tokens"
 msgstr "tokens de acceso"
 
@@ -235,43 +243,43 @@ msgstr "El archivo es demasiado grande."
 msgid "There is no such template."
 msgstr "No existe esa plantilla."
 
-#: rules.py:268
+#: rules.py:269
 msgid "There is no such button."
 msgstr "No existe ese botón."
 
-#: rules.py:287
+#: rules.py:288
 msgid "It isn't your message."
 msgstr "No es tu mensaje."
 
-#: rules.py:289
+#: rules.py:290
 msgid "That message was deleted."
 msgstr "Ese mensaje se borró."
 
-#: rules.py:292
+#: rules.py:293
 msgid "An edit needs its new content."
 msgstr "Una edición necesita su nuevo contenido."
 
-#: rules.py:307
+#: rules.py:308
 msgid "A reaction annotates an event."
 msgstr "Una reacción anota un evento."
 
-#: rules.py:310
+#: rules.py:311
 msgid "That isn't an emoji."
 msgstr "Eso no es un emoji."
 
-#: rules.py:313
+#: rules.py:314
 msgid "That reaction isn't allowed here."
 msgstr "Esa reacción no se permite aquí."
 
-#: rules.py:316
+#: rules.py:317
 msgid "That message can't be reacted to."
 msgstr "No se puede reaccionar a ese mensaje."
 
-#: rules.py:322
+#: rules.py:323
 msgid "You reacted with it already."
 msgstr "Ya reaccionaste con eso."
 
-#: rules.py:338 rules.py:345
+#: rules.py:339 rules.py:346
 msgid "It isn't yours to delete."
 msgstr "No te corresponde borrarlo."
 

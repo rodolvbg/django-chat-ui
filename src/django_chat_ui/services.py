@@ -18,7 +18,8 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import Count, F, IntegerField, OuterRef, Q, QuerySet, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from . import content as contents
@@ -42,6 +43,7 @@ from .models import (
     AbstractParticipant,
     Media,
     Membership,
+    ReadMarker,
     Receipt,
     RoomEvent,
     RoomState,
@@ -610,7 +612,8 @@ def read(
     public: bool = True,
 ) -> None:
     """``participant`` read everything up to ``until``: their unread count
-    follows, and, ``public``, the others see it (``m.read``; else it's
+    follows (a member's; else their ``ReadMarker``: they see it without being
+    in it), and, ``public``, the others see it (``m.read``; else it's
     ``m.read.private``)."""
     unread = (
         conversation.messages.filter(after(until))
@@ -618,12 +621,48 @@ def read(
         .exclude(rel_type="m.replace")
         .count()
     )
-    Membership.objects.filter(
+    member = Membership.objects.filter(
         conversation=conversation, participant=participant
     ).update(last_read=until, unread=unread)
+    if not member:
+        ReadMarker.objects.update_or_create(
+            conversation=conversation,
+            participant=participant,
+            defaults={"last_read": until},
+        )
     if public:
         _receipt(conversation, participant, until, "m.read")
     entry("unread", conversation=conversation, recipient=participant)
+
+
+def with_unread(
+    conversations: QuerySet[AbstractConversation], participant: AbstractParticipant
+) -> QuerySet[AbstractConversation]:
+    """``conversations``, each with ``unread``: how many messages
+    ``participant`` has to read in it. A member's, their membership's count;
+    else (they see it without being in it) the others' messages after their
+    ``ReadMarker``, all of them while they haven't read it."""
+    member = Membership.objects.filter(
+        conversation=OuterRef("pk"), participant=participant
+    ).values("unread")[:1]
+    marker = ReadMarker.objects.filter(
+        conversation=OuterRef(OuterRef("pk")), participant=participant
+    ).values("last_read")[:1]
+    others = (
+        RoomEvent.objects.filter(conversation=OuterRef("pk"), type="m.room.message")
+        .exclude(sender=participant)
+        .exclude(rel_type="m.replace")
+        .filter(id__gt=Coalesce(Subquery(marker), 0))
+        .order_by()
+        .values("conversation")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+    return conversations.annotate(
+        unread=Coalesce(
+            Subquery(member), Subquery(others), 0, output_field=IntegerField()
+        )
+    )
 
 
 def delivered(until: RoomEvent, participant: AbstractParticipant) -> None:
