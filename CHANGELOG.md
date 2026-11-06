@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it. `/sync` gives them, and `services.with_unread(conversations,
   participant)` annotates any conversations with them.
 
+### Changed
+
+- Their unread was 0; now, until they read a conversation once, it's all
+  the others' messages in it. To start them at none, `services.read()`
+  each conversation's last message for each of them (not `public`).
+
 ## [0.1.4] - 2026-11-03
 
 ### Added
